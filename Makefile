@@ -7,11 +7,12 @@ GOBIN_DIR     := $(shell go env GOPATH 2>/dev/null)/bin
 WAILS         := $(GOBIN_DIR)/wails
 BIN           := build/bin
 SEED          := seed/MappaDati
+DIST_WIN      := dist/windows/$(APP)
 MAC_DATI      := $(HOME)/Library/Application Support/MappaAvventura
 WFLAGS        := -s -skipbindings -trimpath
 
 .DEFAULT_GOAL := aiuto
-.PHONY: aiuto setup controlla app mac windows dev avvia chiavetta installa-mac prova pulisci
+.PHONY: aiuto setup controlla app mac windows dev avvia dist-windows chiavetta installa-mac prova pulisci
 
 aiuto:
 	@echo ""
@@ -23,6 +24,8 @@ aiuto:
 	@echo "  make dev            apre l'app sul Mac lavorando direttamente sui dati del progetto (seed/MappaDati):"
 	@echo "                      brani, immagini e testi che carichi finiscono nella sorgente"
 	@echo "  make avvia          come make dev, ma senza ricompilare: apre subito l'app gia' pronta in $(BIN)/"
+	@echo "  make dist-windows   crea dist/windows/$(APP): programma per Windows + dati del progetto,"
+	@echo "                      pronta da scaricare da GitHub su un PC Windows"
 	@echo "  make chiavetta DEST=/Volumes/NOME"
 	@echo "                      copia app, programma e dati sulla chiavetta (i dati esistenti non vengono toccati)"
 	@echo "  make installa-mac   mette l'app in Applicazioni e prepara i dati sul Mac"
@@ -73,6 +76,17 @@ avvia:
 	@test -d "$(BIN)/$(APP).app" || $(MAKE) mac
 	@echo "Dati: $(CURDIR)/$(SEED)  -  chiudi la finestra della mappa per tornare al Terminale."
 	MAPPA_DATI="$(CURDIR)/$(SEED)" "$(BIN)/$(APP).app/Contents/MacOS/$(APP)"
+
+dist-windows: windows
+	rm -rf "$(DIST_WIN)"
+	mkdir -p "$(DIST_WIN)/MappaDati"
+	cp "$(BIN)/$(APP).exe" "$(DIST_WIN)/"
+	cp -R "$(SEED)/." "$(DIST_WIN)/MappaDati/"
+	cp tools/LEGGIMI-WINDOWS.txt "$(DIST_WIN)/LEGGIMI.txt"
+	find "$(DIST_WIN)" -name .DS_Store -delete
+	@echo ""
+	@echo "Pronta: $(DIST_WIN)"
+	@echo "Contiene il programma, i dati del progetto (seed/MappaDati) e le istruzioni."
 
 chiavetta:
 	@test -n "$(DEST)" || { echo "Indica la chiavetta, per esempio: make chiavetta DEST=/Volumes/MUSICA"; exit 1; }

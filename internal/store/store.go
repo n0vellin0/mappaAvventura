@@ -62,6 +62,7 @@ type Asset struct {
 type Store struct {
 	db       *sql.DB
 	assetDir string
+	fileMu   sync.RWMutex // protegge i file della cartella asset mentre vengono letti, scritti o rinominati
 	mu       sync.Mutex
 	seq      int64
 	vers     map[string]int64
@@ -291,6 +292,8 @@ func decodeDataURL(data []byte) (string, []byte, bool) {
 
 // writeAsset scrive il file nella cartella asset/ e lo registra nel database.
 func (s *Store) writeAsset(id, contentType string, data []byte, created int64) error {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
 	enc := ""
 	if strings.HasPrefix(contentType, "text/plain") {
 		if ct, raw, ok := decodeDataURL(data); ok {
@@ -415,6 +418,8 @@ func (s *Store) ListAssets() ([]AssetInfo, error) {
 
 // DeleteAsset elimina un file dalla cartella e dal database.
 func (s *Store) DeleteAsset(id string) error {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
 	a, err := s.GetAsset(id)
 	if errors.Is(err, ErrNotFound) {
 		return nil
