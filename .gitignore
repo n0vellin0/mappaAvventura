@@ -1,0 +1,5 @@
+build/bin/
+build/*.tar.gz
+dati-prova/
+frontend/wailsjs/
+.DS_Store

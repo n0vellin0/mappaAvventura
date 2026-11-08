@@ -1,0 +1,1830 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Mappa dell'Avventura</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+/* Layout: one full-screen stage for the classroom board (LIM). The map is fitted 4:3 inside #view; HUD in the corners;
+   the teacher's "Regia" sits beside the map on wide screens, or fills a phone used as remote. Single dark world. */
+:root{
+  --ink:#121c1d; --panel:#182627; --panel-2:#213233; --line:#34494a;
+  --parchment:#efe4c8; --parch-ink:#2b2418; --parch-mute:#7b6a46; --muted:#a9a088;
+  --gold:#e3b75a; --gold-deep:#a8802f; --leaf:#8fc27a; --ember:#e0683f; --violet:#a98be0;
+  --f-display:"IM Fell English SC","Palatino Linotype","Book Antiqua",Georgia,serif;
+  --f-body:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background:var(--ink);color:var(--parchment);font-family:var(--f-body);font-size:15px;overflow:hidden;-webkit-tap-highlight-color:transparent}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+#stage{position:fixed;inset:0;overflow:hidden}
+#view{position:absolute;inset:0}
+@media (min-width:900px){ body.side #view{right:420px} }
+#board{position:absolute;box-shadow:0 0 0 1px #000,0 20px 80px rgba(0,0,0,.6)}
+#board img,#board canvas,#board svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+#board img{user-select:none;-webkit-user-drag:none}
+#fog{pointer-events:none;transition:opacity .6s ease}
+body.editing #fog{opacity:.15}
+#svg{touch-action:none}
+
+.reg{fill:transparent;stroke:none;pointer-events:all;cursor:pointer}
+.reg.open:hover{stroke:var(--gold);stroke-width:6;stroke-dasharray:18 10;fill:rgba(227,183,90,.08)}
+.reg.reach:hover{stroke:var(--parchment);stroke-opacity:.5;stroke-width:5;stroke-dasharray:6 12}
+.reg.glow{stroke:var(--gold);stroke-width:10;animation:glow 3.2s ease-out forwards}
+@keyframes glow{0%{stroke-opacity:0}25%{stroke-opacity:1;fill:rgba(227,183,90,.18)}100%{stroke-opacity:0;fill:transparent}}
+body.editing .reg{stroke:var(--parchment);stroke-opacity:.6;stroke-width:4;fill:rgba(239,228,200,.06)}
+body.editing .reg.sel{stroke:var(--gold);stroke-opacity:1;stroke-width:7;fill:rgba(227,183,90,.16)}
+.lbl{font-family:var(--f-display);font-size:44px;fill:var(--parchment);stroke:#1b1510;stroke-width:9px;paint-order:stroke;stroke-linejoin:round;text-anchor:middle;pointer-events:none;letter-spacing:.5px}
+.lbl.dim{fill:#cfc6ae;font-size:38px}
+body.editing .lbl{pointer-events:all;cursor:move}
+.handle{fill:var(--gold);stroke:#1b1510;stroke-width:5;cursor:grab}
+.handle:hover{fill:#fff}
+.draft{fill:rgba(227,183,90,.15);stroke:var(--gold);stroke-width:6;stroke-dasharray:14 10;pointer-events:none}
+.draft-pt{fill:var(--gold);stroke:#1b1510;stroke-width:4;pointer-events:none}
+.draft-pt.first{fill:#fff}
+body.placing #svg,body.drawing #svg{cursor:crosshair}
+.trail{display:none;fill:none;stroke:var(--gold);stroke-width:7;stroke-dasharray:2 16;stroke-linecap:round;opacity:.85;pointer-events:none}
+.token{pointer-events:none}
+.token .bob{animation:bob 3s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-10px)}}
+.pin{cursor:pointer}
+.pin .halo{fill:rgba(227,183,90,.22);animation:halo 2.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes halo{50%{transform:scale(1.35);opacity:.4}}
+.pin .core{fill:#1b1510;stroke:var(--gold);stroke-width:5}
+.pin text{font-family:var(--f-display);font-size:40px;fill:var(--gold);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.pin.done .core{fill:var(--gold);stroke:#1b1510}
+.pin.done text{fill:#1b1510}
+.pin.sel .core{stroke:#fff;stroke-width:8}
+
+/* HUD: two bands above and below the map, so nothing sits on top of it */
+.bar{position:absolute;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+#topbar{top:0;padding-top:calc(8px + env(safe-area-inset-top,0px));padding-bottom:8px}
+#botbar{bottom:0;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));padding-top:8px}
+.grp{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px}
+#classBadge{font-family:var(--f-display);font-size:22px;letter-spacing:1px;padding:4px 16px;white-space:nowrap}
+#classBadge small{font-family:var(--f-body);font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-right:8px}
+.res{display:flex;align-items:center;gap:10px;padding:5px 12px}
+.res .lant{display:flex;align-items:center;gap:6px;font-family:var(--f-display);font-size:24px;font-variant-numeric:tabular-nums;color:var(--gold)}
+.res .lant svg{width:24px;height:24px;stroke:var(--gold);fill:none;stroke-width:1.6}
+.res .lant.bump{animation:bump .7s ease}
+@keyframes bump{40%{transform:scale(1.35)}}
+.res .sep{width:1px;height:22px;background:var(--line)}
+#bagBtn{position:relative;display:grid;place-items:center;width:36px;height:34px;padding:0;border:0;background:transparent;border-radius:8px}
+#bagBtn:hover{background:var(--panel-2)}
+#bagBtn svg{width:26px;height:26px;stroke:var(--parchment);fill:none;stroke-width:1.6}
+#bagN{position:absolute;right:-4px;top:-3px;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--gold);color:#1b1510;font-size:12px;font-weight:700;line-height:19px;text-align:center;font-variant-numeric:tabular-nums}
+#bagN.zero{background:var(--panel-2);color:var(--muted);border:1px solid var(--line);line-height:17px}
+#bagBtn.bump{animation:bagbump .9s ease}
+@keyframes bagbump{20%{transform:translateY(-6px) rotate(-8deg)}45%{transform:translateY(0) rotate(6deg)}70%{transform:rotate(-3deg)}}
+.baggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.bagit{background:#e6d8b4;border:1px solid #cdbb8f;border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start;text-align:left;color:var(--parch-ink)}
+.bagit:hover{border-color:#8a3a22}
+.bagit .sw2{flex:none}
+.bagit b{display:block;font-family:var(--f-display);font-weight:400;font-size:1.05em;line-height:1.1}
+.bagit small{display:block;font-size:.72em;color:#5d4f33;line-height:1.35;margin-top:3px}
+.lore{border-top:1px solid #b9a477;border-bottom:1px solid #b9a477;padding:.6em 0;margin:.4em 0 .8em}
+.lore p{white-space:pre-wrap;margin:0;max-width:62ch}
+.loreimg{display:block;width:100%;max-height:42vh;object-fit:cover;border-radius:8px;border:1px solid #b9a477;margin:.2em 0 .8em}
+.chron .pg .loreimg{max-height:200px;margin:.3em 0 .5em}
+.lore p::first-letter{font-family:var(--f-display);float:left;font-size:3.1em;line-height:.85;margin:.06em .12em 0 0;color:#8a3a22}
+.chron{display:flex;flex-direction:column;gap:14px}
+.chron .pg small{display:block;color:#8a3a22;text-transform:uppercase;letter-spacing:.1em;font-size:.65em;font-weight:700;margin-bottom:2px}
+.chron .pg p{white-space:pre-wrap;margin:0}
+.shipmark{display:grid;place-items:center}
+.shipmark svg{width:24px;height:24px;stroke:var(--parchment);fill:none;stroke-width:1.6}
+#carillon{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;cursor:pointer}
+#carillon:hover{border-color:var(--gold)}
+#carillon .cbox{width:34px;height:34px;border-radius:50%;background:var(--gold);display:grid;place-items:center;flex:none}
+#carillon .cbox svg{width:20px;height:20px;stroke:#1b1510;fill:none;stroke-width:1.6}
+#carillon.playing .cbox{animation:bump 1.2s ease-in-out infinite}
+.cells{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.cell{min-width:26px;height:26px;border-radius:5px;border:1px dashed #5d6f6d;transition:background .3s;display:grid;place-items:center;font-family:var(--f-display);font-size:14px;color:#1b1510}
+.cell.on{background:var(--violet);border:1px solid #1b1510;box-shadow:0 0 8px rgba(169,139,224,.6)}
+.cell.now{background:#fff}
+#energy{display:flex;align-items:center;gap:10px;padding:8px 14px}
+.e-lab{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.e-bar{display:grid;grid-template-columns:repeat(10,12px);gap:3px}
+.e-seg{height:16px;border-radius:3px;background:#2b3b3c;transition:background .4s}
+.e-seg.on{background:var(--leaf)}
+#energy .e-seg.on{background:var(--gold)}
+#energy.mid .e-seg.on{background:#e08a3f}
+#energy.low .e-seg.on{background:#d9483b}
+.dragon-eye{width:min(220px,40vw);height:auto;display:block;margin:0 auto .4em}
+.dragon-eye .lid{animation:lid 1.6s ease-out forwards;transform-origin:center}
+@keyframes lid{from{transform:scaleY(.05)}to{transform:scaleY(1)}}
+#energy.low{animation:throb 1.6s ease-in-out infinite}
+@keyframes throb{50%{box-shadow:0 0 0 3px rgba(224,104,63,.45)}}
+.e-msg{font-family:var(--f-display);font-size:16px;white-space:nowrap;display:inline-block;width:12em;overflow:hidden;text-overflow:ellipsis;transform-origin:left center}
+.e-msg.pop{animation:msgpop 1.1s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes msgpop{0%{transform:scale(.6);opacity:0}35%{transform:scale(1.4);opacity:1;color:#fff;text-shadow:0 0 14px rgba(255,140,60,.9)}65%{transform:scale(.92)}100%{transform:scale(1)}}
+.e-brk{display:none}
+.ebtn{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--panel-2);color:var(--parchment);font-weight:700;font-size:18px;line-height:1;display:grid;place-items:center;padding:0;flex:none}
+.ebtn:hover{border-color:var(--gold)}
+.iconbtn{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--panel);border:1px solid var(--line);padding:0;flex:none}
+.iconbtn:hover{border-color:var(--gold)}
+.iconbtn svg{width:21px;height:21px;stroke:var(--parchment);fill:none;stroke-width:1.8}
+.tsep{width:1px;height:26px;background:var(--line);margin:0 2px}
+#btnRegia{border-radius:999px;width:auto;padding:0 18px;font-weight:700;letter-spacing:.04em}
+#btnRegia[aria-pressed="true"]{background:var(--gold);color:#1b1510;border-color:var(--gold)}
+#mapwrap{position:absolute;left:0;right:0;top:60px;bottom:64px;overflow:hidden;touch-action:none}
+#mapwrap.panning{cursor:grabbing}
+#mapwrap,#mapwrap *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#board{transform-origin:0 0}
+.rocketpin{cursor:pointer}
+.rocketpin .halo{fill:rgba(169,139,224,.3);animation:halo 2.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.rocketpin.sel .core{stroke:#fff;stroke-width:8}
+#planetView{position:absolute;left:0;right:0;z-index:4;background:#07051a;overflow:hidden}
+#planetCanvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.pv-ui{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"title tog" "slot mel" "text back";gap:14px 24px;padding:18px 22px;pointer-events:none}
+.pv-ui > *{pointer-events:auto}
+.pv-slot{grid-area:slot;pointer-events:none;min-height:0}
+.pv-title{grid-area:title;align-self:start;min-width:0;font-family:var(--f-display);font-size:clamp(26px,3.4vw,52px);line-height:1.05;color:#e9dcff;text-shadow:0 2px 18px rgba(120,60,220,.8);pointer-events:none}
+.pv-title small{display:block;font-family:var(--f-body);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#b8a4e8}
+.pv-text{grid-area:text;justify-self:start;align-self:end;max-width:min(560px,100%);background:rgba(20,10,45,.8);border:1px solid #4c3486;border-radius:14px;padding:12px 16px;line-height:1.45;font-size:clamp(15px,1.25vw,19px);white-space:pre-wrap}
+.pv-mel{grid-area:mel;align-self:center;justify-self:end;width:auto;max-width:min(46vw,720px);min-width:min(300px,100%);max-height:100%;overflow:auto;background:rgba(20,10,45,.84);border:1px solid #4c3486;border-radius:18px;padding:16px 20px;display:flex;flex-direction:column;gap:6px;animation:melin .9s ease 1.6s both}
+@keyframes melin{from{opacity:0}}
+.pv-mel .mh{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#b8a4e8;font-weight:700}
+.ml{display:flex;align-items:center;gap:clamp(10px,1.6vw,26px);flex-wrap:wrap}
+.mn{font-size:12px;color:#8f7cc7;min-width:1.2em;font-variant-numeric:tabular-nums}
+.mg{display:flex;gap:5px}
+.nt{display:inline-grid;place-items:center;min-width:2.3em;padding:.22em .45em;border-radius:10px;background:#3b2475;color:#efe4ff;font-family:var(--f-display);font-size:clamp(15px,min(1.8vw,2.6vh),30px);line-height:1}
+.nt.magic{background:var(--gold);color:#1b1510;box-shadow:0 0 14px rgba(227,183,90,.7)}
+.ml.cont{margin-top:-2px}
+.ml + .ml:not(.cont){margin-top:6px}
+.mleg{display:flex;align-items:center;gap:10px;font-size:13px;color:#cbbcf0;padding-top:4px;border-top:1px solid #3f2c78}
+.mleg .nt{font-size:15px;min-width:1.8em}
+.pv-meltog{grid-area:tog;justify-self:end;align-self:start;padding:8px 14px;border-radius:999px;border:1px solid #8c6ad8;background:#2a1858;color:#efe4ff;font-weight:700;font-size:13px;white-space:nowrap}
+@media (max-width:820px){ .pv-ui{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(90px,1fr) fit-content(55%) auto auto;grid-template-areas:"title tog" "slot slot" "mel mel" "text text" "back back";gap:10px;padding:12px 14px} .pv-mel{width:auto;justify-self:stretch;align-self:stretch;min-height:0;max-height:100%;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y} .pv-text{max-width:none;justify-self:stretch} .pv-title{font-size:24px} }
+.pv-back{grid-area:back;justify-self:end;align-self:end;display:inline-flex;gap:10px;align-items:center;padding:12px 20px;border-radius:999px;border:1px solid #8c6ad8;background:#2a1858;color:#efe4ff;font-weight:700;white-space:nowrap}
+.pv-back svg{width:20px;height:20px}
+#ctx{position:absolute;z-index:25;min-width:210px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.5);display:flex;flex-direction:column}
+#ctx .t{font-family:var(--f-display);font-size:18px;padding:6px 10px 8px;border-bottom:1px solid var(--line);margin-bottom:4px}
+#ctx button{background:none;border:0;text-align:left;padding:9px 10px;border-radius:8px;font-weight:700;font-size:14px}
+#ctx button:hover{background:var(--panel-2)}
+#ctx button.warn{color:#f0b49f}
+
+/* player */
+#player{display:flex;align-items:center;gap:10px;padding:5px 14px 5px 5px;width:min(440px,100%);flex:0 1 440px}
+#plRestart{width:34px;height:34px;background:transparent!important;border-color:var(--line)!important}
+#plRestart svg{fill:none!important;stroke:var(--parchment)!important;stroke-width:2;width:18px;height:18px}
+#player .iconbtn{background:var(--gold);border-color:var(--gold)}
+#player .iconbtn svg{stroke:none;fill:#1b1510}
+.pl-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.pl-name{font-family:var(--f-display);font-size:18px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.pl-row{display:flex;align-items:center;gap:8px}
+.pl-time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+#plSeek{flex:1;width:auto;min-width:0;height:16px;margin:0;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+#plSeek::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(var(--gold),var(--gold)) 0/var(--pct,0%) 100% no-repeat,#33494a}
+#plSeek::-moz-range-track{height:4px;border-radius:2px;background:#33494a}
+#plSeek::-moz-range-progress{height:4px;border-radius:2px;background:var(--gold)}
+#plSeek::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--gold);margin-top:-5px;border:2px solid #1b1510}
+#plSeek::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--gold);border:2px solid #1b1510}
+.pl-vol{flex:none;display:flex;align-items:center;gap:6px}
+.pl-vol svg{width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:1.8}
+input[type=range]{accent-color:var(--gold);width:90px}
+
+#empty{position:absolute;z-index:6;left:50%;top:50%;transform:translate(-50%,-50%);width:min(460px,calc(100% - 32px));background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;text-align:center}
+#empty h2{font-family:var(--f-display);font-weight:400;font-size:26px;margin:0 0 8px}
+#empty p{color:var(--muted);margin:0 0 16px;line-height:1.5}
+
+/* overlay card (parchment) */
+#scrim{position:absolute;inset:0;z-index:20;background:rgba(8,12,13,.55);display:grid;place-items:center;padding:16px}
+#card{position:relative;width:min(780px,100%);max-height:calc(100% - 16px);overflow:auto;background:var(--parchment);color:var(--parch-ink);border-radius:6px;padding:clamp(20px,3.2vw,40px);box-shadow:0 30px 90px rgba(0,0,0,.6),inset 0 0 0 6px #e4d6b2,inset 0 0 0 7px #b9a477;font-size:clamp(16px,1.45vw,22px);line-height:1.5;animation:cardin .45s cubic-bezier(.2,.9,.3,1.2)}
+#card.wide{width:min(1000px,100%)}
+#card.bg{width:min(900px,100%);background:linear-gradient(rgba(239,228,200,.68),rgba(239,228,200,.8)),var(--bg) center/cover no-repeat,var(--parchment)}
+#card.bg .bgpanel{display:contents}
+#card.bg p,#card.bg h2,#card.bg h3,#card.bg .kicker,#card.bg .big{text-shadow:0 0 12px rgba(239,228,200,.9)}
+.bgmini{width:96px;height:64px;border-radius:8px;background:#2a3d3e center/cover;border:1px solid var(--line)}
+@keyframes cardin{from{transform:translateY(30px) scale(.96);opacity:0}}
+#card .kicker{font-size:.62em;text-transform:uppercase;letter-spacing:.14em;color:var(--parch-mute);font-weight:700}
+#card h2{font-family:var(--f-display);font-weight:400;font-size:2.05em;line-height:1.05;margin:.1em 0 .45em;text-wrap:balance}
+#card h3{font-size:.62em;text-transform:uppercase;letter-spacing:.14em;color:var(--parch-mute);margin:1.1em 0 .35em}
+#card p{margin:0;white-space:pre-wrap;max-width:64ch}
+#card .ph{color:#9c8b66;font-style:italic}
+#card .crow{display:flex;flex-wrap:wrap;gap:12px;margin-top:1.3em;align-items:center}
+#card .close{position:absolute;top:12px;right:12px;width:44px;height:44px;border-radius:50%;border:1px solid #b9a477;background:transparent;color:var(--parch-ink);font-size:24px;line-height:1}
+.pbtn{display:inline-flex;align-items:center;gap:10px;padding:11px 20px;border-radius:999px;border:2px solid var(--parch-ink);background:transparent;color:var(--parch-ink);font-weight:700;font-size:.82em}
+.pbtn.solid{background:var(--parch-ink);color:var(--parchment)}
+.pbtn.gold{border-color:var(--gold-deep);background:var(--gold);color:#2b2418}
+.pbtn.red{border-color:#8a3a22;color:#8a3a22}
+.pbtn:disabled{opacity:.4;cursor:default}
+.pbtn svg{width:1.2em;height:1.2em}
+.who{display:flex;gap:18px;align-items:center;background:#e6d8b4;border-radius:10px;padding:12px;margin:.6em 0}
+.who .face{width:110px;height:110px;border-radius:50%;flex:none;background:#cdbb8f center/cover;border:3px solid #b9a477;display:grid;place-items:center;font-family:var(--f-display);font-size:42px;color:#7b6a46}
+.who .nm{font-family:var(--f-display);font-size:1.35em;line-height:1.1}
+.who .line{font-style:italic}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.steps li{display:flex;gap:10px;align-items:flex-start}
+.steps button{flex:none;width:28px;height:28px;border-radius:6px;border:2px solid var(--parch-ink);background:transparent;display:grid;place-items:center;padding:0;margin-top:2px;color:var(--parchment)}
+.steps button.on{background:var(--parch-ink)}
+.steps button svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:3}
+.steps .tick{flex:none;width:28px;height:28px;border-radius:6px;border:2px solid var(--parch-ink);display:grid;place-items:center;margin-top:2px}
+.steps .tick.on{background:var(--parch-ink);color:var(--parchment)}
+.steps button.tick{padding:0;cursor:pointer}
+.steps .tick svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:3}
+.steps li.now .tick{border-color:var(--gold-deep);background:var(--gold)}
+.steps li.sealed{color:#9c8b66}
+.steps li.sealed .tick{border-style:dashed;border-color:#b9a477}
+.steps li.sealed .tick svg{stroke:#8a3a22;stroke-width:1.8}
+.trialed{display:flex;flex-direction:column;gap:6px}
+.trialed .btn{align-self:flex-end}
+.seal{display:flex;gap:12px;align-items:center;border:2px dashed #b9a477;border-radius:10px;padding:12px;color:#7b6a46}
+.seal svg{width:30px;height:30px;flex:none;stroke:#8a3a22;fill:none;stroke-width:1.6}
+.secret{background:#2b2418;color:var(--parchment);border-radius:10px;padding:14px 16px}
+#card .secret p{color:var(--parchment)}
+.big{font-family:var(--f-display);font-size:2.6em;line-height:1;text-align:center;margin:.2em 0 .3em}
+.center{text-align:center}
+.center p{margin-inline:auto}
+.cost{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-display);font-size:1.3em;color:#8a5a00}
+.cost svg{width:1.1em;height:1.1em;stroke:currentColor;fill:none;stroke-width:1.6}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.gcard{background:#e6d8b4;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center}
+.gcard .face{width:96px;height:96px;border-radius:50%;background:#cdbb8f center/cover;border:3px solid #b9a477;display:grid;place-items:center;font-family:var(--f-display);font-size:36px;color:#7b6a46}
+.gcard.unknown{opacity:.55}
+.gcard .nm{font-family:var(--f-display);font-size:1.15em;line-height:1.1}
+.gcard small{color:#7b6a46;font-size:.7em;text-transform:uppercase;letter-spacing:.08em}
+.loglist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.loglist li{display:flex;gap:12px}
+.loglist time{flex:none;color:#7b6a46;font-size:.75em;min-width:3.5em;padding-top:.2em;font-variant-numeric:tabular-nums}
+.shop{display:flex;flex-direction:column;gap:8px}
+.shop .it{display:flex;gap:12px;align-items:center;background:#e6d8b4;border-radius:10px;padding:10px 12px}
+.shop .it .sw2{width:30px;height:30px;border-radius:8px;flex:none;border:1px solid #1b1510;display:grid;place-items:center;font-family:var(--f-display)}
+.shop .it .tx{flex:1;min-width:0}
+.shop .it .tx small{display:block;color:#7b6a46}
+
+/* drawer */
+#drawer{position:absolute;z-index:30;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(102%);transition:transform .3s ease;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+#drawer.open{transform:none}
+.d-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+.d-head h1{font-family:var(--f-display);font-weight:400;font-size:24px;margin:0}
+.tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{background:none;border:0;padding:10px 10px;color:var(--muted);border-bottom:2px solid transparent;font-weight:700;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--parchment);border-color:var(--gold)}
+.d-body{flex:1;overflow:auto;padding:14px 16px 28px;display:flex;flex-direction:column;gap:18px}
+.sec{display:flex;flex-direction:column;gap:8px}
+.sec-t{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.note{font-size:13px;color:var(--muted);line-height:1.45;margin:0}
+.banner{background:#3a2a18;border:1px solid #6b4a22;color:#f3d9a8;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45}
+.alert{background:#2b2350;border:1px solid #6a55b8;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.alert b{font-family:var(--f-display);font-weight:400;font-size:19px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);font-weight:700;font-size:13px}
+.seg.cls button{font-family:var(--f-display);font-size:18px;font-weight:400}
+.seg button[aria-pressed="true"]{background:var(--gold);color:#1b1510;border-color:var(--gold)}
+.rows{display:flex;flex-direction:column;gap:6px}
+.row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;background:var(--panel-2);border:1px solid transparent;border-radius:10px;padding:6px 6px 6px 10px}
+.row.sel{border-color:var(--gold)}
+.row .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .nm small{display:block;color:var(--muted);font-size:12px}
+.row .acts{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.dot{width:12px;height:12px;border-radius:50%}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;margin-right:4px;font-weight:700}
+.pill.fog{background:#33494a;color:#c9d2d0}
+.pill.exp{background:#4b3d7a;color:#e4dbff}
+.pill.lib{background:var(--gold);color:#1b1510}
+.pill.here{background:var(--leaf);color:#13230e}
+.btn{padding:7px 11px;border-radius:8px;border:1px solid var(--line);background:#2a3d3e;font-weight:700;font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--gold)}
+.btn.primary{background:var(--gold);color:#1b1510;border-color:var(--gold)}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:#7a3a2a;color:#f0b49f}
+.btn.armed{background:var(--ember);color:#1b1510;border-color:var(--ember)}
+.btn:disabled{opacity:.45;cursor:default}
+.cnt{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cnt .val{font-size:28px;font-family:var(--f-display);min-width:2.2ch;text-align:center;font-variant-numeric:tabular-nums}
+.cnt .btn.sq{font-size:20px;width:42px;height:38px;padding:0}
+label.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.04em}
+.inp{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:15px;font-weight:400;letter-spacing:0;color:var(--parchment);width:100%}
+textarea.inp{min-height:76px;resize:vertical;line-height:1.45}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid transparent;padding:0}
+.sw[aria-pressed="true"]{border-color:#fff}
+.flexrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.check{display:flex;gap:10px;align-items:center;font-size:14px}
+.check input{width:20px;height:20px;accent-color:var(--gold)}
+.status{font-size:12px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
+.audioname{font-size:13px;overflow-wrap:anywhere}
+.box{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.box > .sec-t{color:var(--gold)}
+.facemini{width:56px;height:56px;border-radius:50%;background:#2a3d3e center/cover;border:1px solid var(--line)}
+body.remote #view{display:none!important}
+body.remote #drawer{transform:none;width:100%;border-left:0;transition:none}
+body.remote #btnCloseDrawer{display:none}
+.remotebar{display:flex;flex-wrap:wrap;gap:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:10px}
+.remotebar .lab{width:100%;font-size:12px;color:var(--muted)}
+.cnt .lab{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;min-width:5.5em}
+#toast{position:absolute;z-index:40;left:50%;bottom:calc(var(--botH,64px) + 12px);transform:translateX(-50%);background:var(--parchment);color:var(--parch-ink);padding:10px 18px;border-radius:999px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:calc(100% - 32px);text-align:center}
+#toast button{margin-left:10px;border:0;border-radius:999px;background:var(--parch-ink);color:var(--parchment);padding:4px 12px;font-weight:700}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (max-width:640px){
+  .e-bar{grid-template-columns:repeat(10,8px)}
+  #classBadge small{display:none}
+  #energy{flex-wrap:wrap;border-radius:14px;row-gap:6px;column-gap:8px}
+  #energy .e-lab{order:0}
+  #energy .e-msg{order:1;font-size:14px}
+  #energy .e-brk{display:block;order:2;flex-basis:100%;height:0}
+  #energy .ebtn,#energy .e-bar{order:3}
+  .cell{min-width:20px;height:20px;font-size:11px}
+  #player{flex-basis:100%;order:3}
+  #classBadge{font-size:18px}
+  .who{flex-direction:column;text-align:center}
+}
+/* dragon awakening: the screen itself grows tense */
+#dragonfx{position:absolute;left:0;right:0;z-index:4;pointer-events:none;overflow:hidden;opacity:0;transition:opacity 1.4s ease;--a:0;--p:4s}
+#dragonfx.on{opacity:1}
+#dragonfx .vig{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 42%,rgba(160,24,8,var(--a)) 100%);animation:breathe var(--p) ease-in-out infinite}
+@keyframes breathe{50%{opacity:.55}}
+#dragonfx .flash{position:absolute;inset:0;background:rgba(200,40,10,.28);opacity:0}
+#dragonfx .flash.go{animation:flash .9s ease-out}
+@keyframes flash{0%{opacity:1}100%{opacity:0}}
+#dragonfx .emb{position:absolute;bottom:-12px;width:7px;height:7px;border-radius:50%;background:#ffb34a;box-shadow:0 0 10px 3px rgba(255,120,30,.7);opacity:0;animation:ember 4.5s linear infinite}
+#dragonfx:not(.hot) .emb{display:none}
+@keyframes ember{0%{transform:translate(0,0);opacity:0}10%{opacity:.9}100%{transform:translate(var(--dx,20px),-70vh);opacity:0}}
+#dragonfx .eye{position:absolute;left:50%;top:-6px;width:min(300px,34vw);transform:translate(-50%,-130%);transition:transform 1.8s ease;filter:drop-shadow(0 0 22px rgba(255,90,20,.8))}
+#dragonfx.peek .eye{transform:translate(-50%,-30%)}
+#dragonfx .eye .lid2{transform-origin:100px 55px;animation:blink 5s ease-in-out infinite}
+@keyframes blink{0%,44%,56%,100%{transform:scaleY(1)}50%{transform:scaleY(.08)}}
+#mapwrap.rumble,#planetView.rumble{animation:rumble .6s linear}
+@keyframes rumble{10%,50%,90%{transform:translate(-6px,2px)}30%,70%{transform:translate(6px,-2px)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="stage">
+ <div id="view">
+  <div id="mapwrap"><div id="board">
+    <img id="mapimg" src="mappa-2.jpg" alt="Mappa del mondo: la città viola, il bosco d'ametista con la torre, il deserto, il villaggio degli orchi, le terre dei draghi, la rocca di ghiaccio, il vulcano con la torre nera e l'isola dell'albero al centro" draggable="false">
+    <canvas id="fog"></canvas>
+    <svg id="svg" viewBox="0 0 2048 1536" preserveAspectRatio="none" aria-label="Regioni della mappa">
+      <g id="gRegions"></g><g id="gTrail"></g><g id="gLabels"></g><g id="gPins"></g><g id="gToken"></g><g id="gEdit"></g>
+    </svg>
+  </div></div>
+
+  <div id="planetView" hidden>
+    <canvas id="planetCanvas"></canvas>
+    <div class="pv-ui">
+    <div class="pv-title"><small>Un altro mondo</small><span id="pvName"></span></div>
+    <button class="pv-meltog" id="pvMelTog" hidden>Nascondi la melodia</button>
+    <div class="pv-slot" id="pvSlot"></div>
+    <div class="pv-mel" id="pvMel" hidden></div>
+    <div class="pv-text" id="pvText" hidden></div>
+    <button class="pv-back" id="pvBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c3 3 4 7 3 12H9C8 9 9 5 12 2z"/><path d="M9 14l-3 3 3 1M15 14l3 3-3 1"/></svg>Torna sulla mappa</button>
+    </div>
+  </div>
+
+  <div id="dragonfx" aria-hidden="true"><div class="vig"></div><div class="flash"></div><span class="emb" style="left:6%;animation-delay:0s;--dx:30px"></span><span class="emb" style="left:14%;animation-delay:1.6s;--dx:-20px"></span><span class="emb" style="left:23%;animation-delay:3.1s;--dx:25px"></span><span class="emb" style="left:35%;animation-delay:0.8s;--dx:-35px"></span><span class="emb" style="left:48%;animation-delay:2.4s;--dx:20px"></span><span class="emb" style="left:59%;animation-delay:0.3s;--dx:-15px"></span><span class="emb" style="left:68%;animation-delay:3.6s;--dx:35px"></span><span class="emb" style="left:77%;animation-delay:1.2s;--dx:-25px"></span><span class="emb" style="left:86%;animation-delay:2.8s;--dx:15px"></span><span class="emb" style="left:94%;animation-delay:0.6s;--dx:-30px"></span><svg class="eye" viewBox="0 0 200 110"><g class="lid2"><path d="M10 55 Q100 -15 190 55 Q100 125 10 55Z" fill="#e0683f" stroke="#2b2418" stroke-width="5"/><ellipse cx="100" cy="55" rx="36" ry="36" fill="#f3c34a" stroke="#2b2418" stroke-width="4"/><ellipse cx="100" cy="55" rx="8" ry="32" fill="#1b1510"/></g></svg></div>
+
+  <div class="bar" id="topbar">
+    <div class="grp">
+      <div class="chip" id="classBadge"><small>Compagnia</small><span id="className">—</span></div>
+      <div class="chip res" id="resBar">
+        <span class="lant" id="lantVal" title="Lanterne"></span>
+        <span class="sep"></span>
+        <button id="bagBtn" title="Lo zaino" aria-label="Apri lo zaino"><svg viewBox="0 0 24 24"><path d="M8 7V5a4 4 0 0 1 8 0v2"/><path d="M5 9a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"/><path d="M9 13h6v3H9z"/></svg><span id="bagN" class="zero">0</span></button>
+        <span class="shipmark" id="shipMark" title="La nave è vostra" hidden><svg viewBox="0 0 24 24"><path d="M3 15h18l-3 5H6zM12 3v12M12 4l6 8h-6M12 6l-5 6h5"/></svg></span>
+      </div>
+    </div>
+    <div class="grp"><div class="chip" id="energy" hidden><span class="e-lab">Risveglio del dragone</span><button class="ebtn" id="dMinus" aria-label="Il dragone si calma">−</button><span class="e-bar" id="eBar"></span><button class="ebtn" id="dPlus" aria-label="Il dragone si sveglia">+</button><span class="e-msg" id="eMsg"></span><span class="e-brk"></span></div></div>
+  </div>
+
+  <div class="bar" id="botbar">
+    <div class="grp"><div class="chip" id="carillon" role="button" tabindex="0" aria-label="Suona la canzone dell'allievo" title="Gli appunti dell'allievo"><span class="cbox"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v3h3"/><path d="M9 10h6M9 13h6M9 16h4"/></svg></span><span class="cells" id="cells"></span></div></div>
+    <div class="chip" id="player" hidden>
+      <button class="iconbtn" id="plToggle" aria-label="Pausa"></button>
+      <button class="iconbtn" id="plRestart" aria-label="Ricomincia da capo" title="Da capo"><svg viewBox="0 0 24 24"><path d="M4 5v6h6"/><path d="M5.5 15a7 7 0 1 0 1.6-7.4L4 11"/></svg></button>
+      <div class="pl-info"><div class="pl-name" id="plName"></div><div class="pl-row"><input type="range" id="plSeek" min="0" max="1000" value="0" aria-label="Posizione nel brano"><span class="pl-time" id="plTime">0:00</span></div></div>
+      <label class="pl-vol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg><input type="range" id="plVol" min="0" max="100" aria-label="Volume"></label>
+    </div>
+    <div class="grp" id="tools">
+      <button class="iconbtn" id="zFit" hidden title="Tutta la mappa (0)" aria-label="Tutta la mappa"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/><path d="M8 10l-2 2 2 2M16 10l2 2-2 2"/></svg></button>
+      <button class="iconbtn" id="btnPrev" title="Nella puntata precedente" aria-label="Nella puntata precedente"><svg viewBox="0 0 24 24"><path d="M4 5h11a3 3 0 0 1 3 3v12H7a3 3 0 0 1-3-3z"/><path d="M8 9h6M8 13h6"/></svg></button>
+      <button class="iconbtn" id="btnAlbum" title="Album dei personaggi" aria-label="Album dei personaggi"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="17" cy="8" r="2.5"/><path d="M15 14a5 5 0 0 1 6 5"/></svg></button>
+      <button class="iconbtn" id="btnChron" title="Le Cronache" aria-label="Le Cronache"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7M8 10h7"/></svg></button>
+      <button class="iconbtn" id="btnSecrets" title="I segreti" aria-label="I segreti scoperti"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1.5"/></svg></button>
+      <button class="iconbtn" id="btnFull" title="Schermo intero (F)" aria-label="Schermo intero"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="iconbtn" id="btnRegia" aria-pressed="false" title="Regia (R)">Regia</button>
+    </div>
+  </div>
+
+  <div id="empty" hidden>
+    <h2>La mappa è ancora tutta da scoprire</h2>
+    <p>Non ci sono regioni salvate. Carica il mondo di partenza con le dieci regioni già tracciate.</p>
+    <button class="btn primary" id="btnSeed">Carica il mondo di partenza</button>
+  </div>
+
+  <div id="scrim" hidden><div id="card" role="dialog" aria-modal="true"></div></div>
+  <div id="ctx" hidden role="menu"></div>
+ </div>
+
+  <aside id="drawer" aria-label="Regia">
+    <div class="d-head"><h1 id="dTitle">Regia</h1><button class="iconbtn" id="btnCloseDrawer" aria-label="Chiudi regia"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="lezione" aria-selected="true">Lezione</button>
+      <button class="tab" role="tab" data-tab="mappa" aria-selected="false">Mappa</button>
+      <button class="tab" role="tab" data-tab="contenuti" aria-selected="false">Contenuti</button>
+      <button class="tab" role="tab" data-tab="classi" aria-selected="false">Classi</button>
+    </div>
+    <div class="d-body" id="dBody"></div>
+  </aside>
+  <div id="toast" hidden></div>
+  <audio id="bgm" loop preload="none"></audio>
+  <audio id="car" preload="none"></audio>
+  <input type="file" id="fileAudio" class="vh" accept=".m4a,.mp4,.aac,.mp3,.wav,.ogg,.webm,audio/*">
+  <input type="file" id="fileImage" class="vh" accept="image/png,image/jpeg,image/webp">
+  <input type="file" id="fileBackup" class="vh" accept=".json,application/json">
+</div>
+
+<script src="shim.js"></script>
+<script>
+(() => {
+"use strict";
+const VW = 2048, VH = 1536;
+const COLORS = ["#e3b75a","#a98be0","#e0a35c","#d9663f","#7fbf6a","#8fd3e8","#e0707a","#ff9a4d","#5fc6b8","#f3ead2"];
+const EXPL = 0.5, TRIAL = 0.25;
+// Starting world: outlines traced on this map, names and entry costs (used by the "carica" button and the offline trial mode).
+const DEFAULT_REGIONS = [
+ {id:"borgo",name:"Portalume",order:1,color:"#a98be0",cost:0,lx:0.215,ly:0.86,poly:[0,0.798,0,1,0.4519,1,0.4144,0.7338,0.2905,0.6831,0.2274,0.6941]},
+ {id:"foresta",name:"Il Bosco d'Ametista",order:2,color:"#c39cf0",cost:1,lx:0.15,ly:0.58,poly:[0,0.2039,0,0.798,0.2271,0.6942,0.2947,0.6849,0.3135,0.572,0.2678,0.4294,0.2682,0.2946,0.0389,0.2809]},
+ {id:"albero",name:"L'Albero del Primo Canto",order:3,color:"#f3ead2",cost:2,lx:0.485,ly:0.47,poly:[0.2673,0.4292,0.3133,0.5714,0.2931,0.6832,0.4144,0.7338,0.5881,0.5881,0.6304,0.5143,0.6473,0.4363,0.6129,0.4138,0.438,0.3896,0.3799,0.4227]},
+ {id:"deserto",name:"Le Sabbie di Karesh",order:4,color:"#e0a35c",cost:1,lx:0.66,ly:0.75,poly:[0.4135,0.7354,0.4519,1,0.7812,1,0.7813,0.8205,0.8689,0.7656,0.7632,0.6532,0.7035,0.5739,0.7014,0.3666,0.6871,0.349,0.6473,0.4363,0.6304,0.5143,0.588,0.5882]},
+ {id:"accampamento",name:"Grugnarok",order:5,color:"#d9663f",cost:2,lx:0.83,ly:0.5,poly:[0.6871,0.349,0.7014,0.367,0.7031,0.5729,0.7636,0.6538,0.8675,0.7665,0.9292,0.7176,1,0.6972,1,0.3646,0.9277,0.3125,0.8398,0.2799,0.7254,0.2953]},
+ {id:"mare",name:"Il Mare delle Spire",order:6,color:"#5fc6b8",cost:2,lx:0.89,ly:0.93,poly:[0.7796,0.8223,0.7812,1,1,1,1,0.6973,0.9293,0.7175,0.8703,0.7663]},
+ {id:"tundra",name:"La Rocca di Brina",order:7,color:"#8fd3e8",cost:2,lx:0.43,ly:0.31,poly:[0.2642,0.2914,0.2682,0.2954,0.2684,0.428,0.3795,0.423,0.4419,0.39,0.6126,0.4138,0.6473,0.4363,0.6802,0.3597,0.7254,0.2953,0.6702,0.2005,0.4028,0.1576,0.3077,0.1797,0.293,0.1953]},
+ {id:"dragoverde",name:"Le Terre del Drago Verde",order:8,color:"#7fbf6a",cost:2,lx:0.86,ly:0.16,poly:[0.6727,0.2021,0.7254,0.2953,0.8399,0.2799,0.9277,0.3125,1,0.3646,1,0,0.7916,0,0.7443,0.0768,0.6934,0.1302,0.6802,0.1902]},
+ {id:"montagne",name:"I Picchi Ardenti",order:9,color:"#e0707a",cost:3,lx:0.54,ly:0.08,poly:[0.2832,0,0.3041,0.1602,0.311,0.1769,0.408,0.158,0.6727,0.2021,0.6802,0.1905,0.6935,0.1301,0.7447,0.0764,0.7916,0]},
+ {id:"vulcano",name:"Monte Cenere",order:10,color:"#ff9a4d",cost:3,lx:0.13,ly:0.15,poly:[0,0.2039,0.0387,0.281,0.2643,0.2944,0.2929,0.1957,0.311,0.1769,0.3042,0.1604,0.2832,0,0,0]}
+];
+
+const $ = (s, r=document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const ls = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v);}catch{ return d; } }, set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} } };
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+const NP = 4, NOTE_NAMES = ["Melodia","Ritmo","Strumenti","Dinamiche"];
+const noteName = n => (S.carillon.names && S.carillon.names[n-1]) || NOTE_NAMES[n-1] || ("Appunto "+n);
+const NOTES = Array.from({length:NP},(_,i)=>i+1);
+const SOUNDS = [["dorme","Torna a dormire"],["agita","Si agita"],["quasi","Sta per svegliarsi"],["sveglio","Sveglio"]];
+const normSounds = v => Object.fromEntries(SOUNDS.map(([k])=>{ const o=(v&&v[k])||{}; return [k,{ audioId:o.audioId||"", audioEnc:o.audioEnc||"", audioName:o.audioName||"" }]; }));
+
+let REMOTE = location.hash === "#telecomando" || ls.get("mappa.remote", false);
+const S = {
+  regions:new Map(), tracks:new Map(), plIdx:{}, classes:new Map(), items:new Map(), events:new Map(), sides:new Map(), planets:new Map(), scene:null, selPlanet:null,
+  settings:{ energyEnabled:false, startRegion:"borgo", shipCost:2 }, routes:{ edges:{}, dir:{} }, carillon:{ starts:[], names:[], audioId:"", audioEnc:"", audioName:"" }, sounds:{},
+  activeClass: ls.get("mappa.class", null), tab:"lezione", mtab:"regioni", ctab:"carillon", drawerOpen:false,
+  sel:null, selSide:null, selItem:null, selEvent:null, drawing:null, placing:null,
+  view:null, loaded:{ regions:false }, db:null, assets:null, downloads:null, offline:false,
+  muted: false, vol: ls.get("mappa.vol", 0.85), status:"",
+  live:{ cls:null, card:null, cardN:0, music:null, musicN:0, vol:null, panel:null, panelN:0, scene:null, sceneN:0 }
+};
+// S.view: null | {k:"region",id} | {k:"side",id} | {k:"confirm",id} | {k:"panel",p} | {k:"item",i}
+
+/* ---------------- normalizers ---------------- */
+function normRegion(id, v={}){
+  const ch = v.character || {};
+  return { id, name:v.name||"", order:v.order??999, color:v.color||COLORS[0], poly:Array.isArray(v.poly)?v.poly.slice():[],
+    lx:typeof v.lx==="number"?v.lx:null, ly:typeof v.ly==="number"?v.ly:null, cost:typeof v.cost==="number"?v.cost:1,
+    story:v.story||"", entry:v.entry||"", steps:Array.isArray(v.steps)?v.steps.slice():[], activity:v.activity||"", secret:v.secret||"", secretTitle:v.secretTitle||"", lore:v.lore||"", loreImgId:v.loreImgId||"", quiet:!!v.quiet, shipOnly:!!v.shipOnly, sealed:!!v.sealed, wallText:v.wallText||"",
+    piece:+v.piece||0, character:{ name:ch.name||"", line:ch.line||"", imageId:ch.imageId||"", after:+ch.after||0 },
+    audioId:v.audioId||"", audioName:v.audioName||"", audioEnc:v.audioEnc||"", bgId:v.bgId||"" };
+}
+function normClass(id, v={}){
+  const zones = {...(v.zones||{})};
+  if(!v.zones && Array.isArray(v.revealed)) v.revealed.forEach(r => zones[r] = "liberated");
+  return { id, name:v.name||id, order:v.order??999, zones, at:v.at||null, path:(v.path||[]).slice(), lanterns:typeof v.lanterns==="number"?v.lanterns:3,
+    items:(v.items||[]).slice(), pieces:(v.pieces||[]).slice(), ship:!!v.ship, dragon:typeof v.dragon==="number"?v.dragon:0, steps:clone(v.steps||{}),
+    visited:(v.visited||[]).slice(), loreSeen:(v.loreSeen||[]).slice(), planetsSeen:(v.planetsSeen||[]).slice(), deckUsed:(v.deckUsed||[]).slice(), log:(v.log||[]).slice(), pending:v.pending?{...v.pending}:null };
+}
+const normTrack = (id,v={}) => ({ id, name:v.name||"", order:v.order??999, audioId:v.audioId||"", audioEnc:v.audioEnc||"", audioName:v.audioName||"", regions:Array.isArray(v.regions)?v.regions.slice():[] });
+const normItem = (id,v={}) => ({ id, name:v.name||"", effect:v.effect||"", price:+v.price||0, color:v.color||COLORS[0] });
+const normEvent = (id,v={}) => ({ id, title:v.title||"", text:v.text||"", lanterns:+v.lanterns||0 });
+const normPlanet = (id,v={}) => ({ id, name:v.name||"", text:v.text||"", melody:v.melody||"", after:+v.after||0, x:typeof v.x==="number"?v.x:0.178, y:typeof v.y==="number"?v.y:0.47, audioId:v.audioId||"", audioName:v.audioName||"", audioEnc:v.audioEnc||"" });
+const normSide = (id,v={}) => ({ id, name:v.name||"", kind:v.kind==="mercante"?"mercante":"attivita", x:+v.x||0.5, y:+v.y||0.5, activity:v.activity||"", reward:v.reward||"", bgId:v.bgId||"" });
+const bodyOf = o => { const b = clone(o); delete b.id; return b; };
+
+/* ---------------- helpers ---------------- */
+const sorted = m => [...m.values()].sort((a,b)=>(a.order??999)-(b.order??999) || String(a.name||a.title||"").localeCompare(String(b.name||b.title||"")));
+const regionList = () => sorted(S.regions);
+const classList = () => sorted(S.classes);
+const cls = () => S.classes.get(S.activeClass) || classList()[0] || null;
+const polyPts = r => { const p=r.poly||[], out=[]; for(let i=0;i+1<p.length;i+=2) out.push([p[i]*VW, p[i+1]*VH]); return out; };
+const ptsAttr = pts => pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ");
+function centroid(pts){
+  let a=0,cx=0,cy=0;
+  for(let i=0;i<pts.length;i++){ const [x0,y0]=pts[i],[x1,y1]=pts[(i+1)%pts.length]; const f=x0*y1-x1*y0; a+=f; cx+=(x0+x1)*f; cy+=(y0+y1)*f; }
+  if(Math.abs(a)<1e-6){ const n=pts.length||1; return [pts.reduce((s,p)=>s+p[0],0)/n, pts.reduce((s,p)=>s+p[1],0)/n]; }
+  return [cx/(3*a), cy/(3*a)];
+}
+const anchor = r => (r.lx!=null && r.ly!=null) ? [r.lx*VW, r.ly*VH] : centroid(polyPts(r));
+function inPoly(x, y, pts){ let ins=false; for(let i=0,j=pts.length-1;i<pts.length;j=i++){ const [xi,yi]=pts[i],[xj,yj]=pts[j]; if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi)) ins=!ins; } return ins; }
+const regionAt = (nx, ny) => regionList().find(r => inPoly(nx*VW, ny*VH, polyPts(r)));
+const zoneOf = (c, id) => c ? (c.zones[id] || null) : null;
+function charVisible(c, r){ const z = zoneOf(c, r.id); if(!z || !r.character.name) return false; if(z==="liberated") return true; return trialsPassed(c, r) >= (r.character.after||0); }
+let toastT;
+function toast(msg, undo){ const t=$("#toast"); t.textContent=msg; if(undo){ const b=document.createElement("button"); b.textContent="Annulla"; b.onclick=()=>{ t.hidden=true; undo(); }; t.appendChild(b); } t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, undo?7000:3400); }
+function armConfirm(btn, label, fn){
+  if(btn.dataset.armed){ delete btn.dataset.armed; btn.classList.remove("armed"); btn.textContent=btn.dataset.orig; fn(); return; }
+  btn.dataset.orig=btn.textContent; btn.dataset.armed="1"; btn.classList.add("armed"); btn.textContent=label;
+  setTimeout(()=>{ if(btn.dataset.armed){ delete btn.dataset.armed; btn.classList.remove("armed"); btn.textContent=btn.dataset.orig; } }, 4000);
+}
+const I = {
+  lant:`<svg viewBox="0 0 24 24"><path d="M9 3h6M12 3v2M8 9a4 4 0 0 1 8 0v8a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3z"/><path d="M12 12c1.2 1.3 1.2 2.7 0 4c-1.2-1.3-1.2-2.7 0-4z"/></svg>`,
+  lock:`<svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`,
+  check:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>`,
+  play:`<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4l13 8-13 8z"/></svg>`,
+  pause:`<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>`,
+  rocket:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2c3 3 4 7 3 12H9C8 9 9 5 12 2z"/><path d="M9 14l-3 3 3 1M15 14l3 3-3 1M11 18l1 4 1-4"/><circle cx="12" cy="9" r="1.6"/></svg>`
+};
+
+/* ---------------- adjacency & travel ---------------- */
+let adjCache = null, adjKey = "";
+function segDist(px,py,ax,ay,bx,by){ const dx=bx-ax, dy=by-ay, l=dx*dx+dy*dy; let t = l ? ((px-ax)*dx+(py-ay)*dy)/l : 0; t=Math.max(0,Math.min(1,t)); return Math.hypot(px-(ax+t*dx), py-(ay+t*dy)); }
+function touching(A, B){
+  const eps = 22; let hits = 0;
+  for(const [x,y] of A){ for(let j=0;j<B.length;j++){ const [ax,ay]=B[j],[bx,by]=B[(j+1)%B.length]; if(segDist(x,y,ax,ay,bx,by) < eps){ hits++; break; } } if(hits>=2) return true; }
+  for(const [x,y] of B){ for(let j=0;j<A.length;j++){ const [ax,ay]=A[j],[bx,by]=A[(j+1)%A.length]; if(segDist(x,y,ax,ay,bx,by) < eps){ hits++; break; } } if(hits>=2) return true; }
+  return false;
+}
+function adjacency(){
+  const key = regionList().map(r=>r.id+":"+r.poly.join(",")).join("|");
+  if(adjCache && key===adjKey) return adjCache;
+  const list = regionList(), P = new Map(list.map(r=>[r.id, polyPts(r)])), adj = new Map(list.map(r=>[r.id,new Set()]));
+  for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){ const a=list[i].id, b=list[j].id; if(P.get(a).length>2 && P.get(b).length>2 && touching(P.get(a),P.get(b))){ adj.get(a).add(b); adj.get(b).add(a); } }
+  adjCache = adj; adjKey = key; return adj;
+}
+const routeKey = (a,b) => [a,b].sort().join("|");
+const route = (a,b) => S.routes.edges?.[routeKey(a,b)] || {};
+const wallOf = (from,to) => S.routes.dir?.[from+">"+to] || {};
+function routeCost(a,b){ const rt = route(a,b), r = S.regions.get(b); return typeof rt.cost==="number" ? rt.cost : (r ? r.cost : 1); }
+function travelCheck(c, to){
+  const r = S.regions.get(to); if(!c || !r) return { ok:false, reason:"" };
+  if(c.pending) return { ok:false, reason:"C'è già un viaggio in corso." };
+  if(!c.at) return { ok:true, cost:0, trial:!zoneOf(c,to) };
+  if(to===c.at) return { ok:false, reason:"La compagnia è già qui." };
+  const z = zoneOf(c,to), near = adjacency().get(c.at)?.has(to), rt = route(c.at,to);
+  if(!z && r.shipOnly && !c.ship) return { ok:false, reason:`${r.name} si raggiunge solo in nave.` };
+  const dw = wallOf(c.at,to), roadWall = near && (dw.wall || rt.wall);
+  const barred = !z && (roadWall || r.sealed);
+  if(!barred && near && rt.closed && !c.ship) return { ok:false, reason:"Questa strada si percorre solo in nave." };
+  if(!barred && !near && !c.ship) return { ok:false, reason:"Troppo lontano: ci si muove solo verso le zone confinanti, a meno di avere la nave." };
+  if(barred && !near && !c.ship) return { ok:false, reason:"Troppo lontano: ci si muove solo verso le zone confinanti, a meno di avere la nave." };
+  const viaShip = !near || (!!rt.closed && !rt.wall) || (!z && r.shipOnly);
+  const cost = z ? 0 : (viaShip ? (S.settings.shipCost ?? 2) : routeCost(c.at,to));
+  if(c.lanterns < cost) return { ok:false, cost, reason:`Servono ${cost} lanterne e ne avete ${c.lanterns}: fate scorta in un'area secondaria.` };
+  return { ok:true, cost, trial:!z, ship:viaShip, wall:barred, wallText: (roadWall && dw.text) || r.wallText || "" };
+}
+
+/* ---------------- persistence ---------------- */
+const queues = {};
+function write(path, body){
+  if(!S.db) return;
+  const q = queues[path] || (queues[path] = { running:false, next:null });
+  q.next = body; if(!q.running) runQueue(path);
+}
+async function runQueue(path){
+  const q = queues[path]; q.running = true; setStatus("Salvataggio…");
+  while(q.next){
+    const body = q.next; q.next = null;
+    try { await S.db.doc(path).set(body); }
+    catch(e){ if(e && e.code==="unavailable"){ await new Promise(r=>setTimeout(r, 700+Math.random()*700)); try{ await S.db.doc(path).set(body);}catch(e2){ writeErr(e2); } } else writeErr(e); }
+  }
+  q.running = false; if(!Object.values(queues).some(x=>x.running)) setStatus("Salvato");
+}
+function writeErr(e){ const c=e&&e.code; toast(c==="quota_exceeded"?"Spazio di salvataggio pieno.":c==="invalid_argument"?"Non hai i permessi per salvare su questa mappa.":"Salvataggio non riuscito: controlla la connessione."); setStatus("Non salvato"); }
+async function removeDoc(path){ if(!S.db) return; try{ await S.db.doc(path).delete(); }catch(e){ writeErr(e); } }
+function setStatus(s){ if(!S.db) return; S.status=s; const el=$("#saveStatus"); if(el) el.textContent=s; }
+const timers = {};
+function objAt(path){
+  const [col, id] = path.split("/");
+  if(col==="settings") return id==="main" ? S.settings : id==="routes" ? S.routes : id==="carillon" ? S.carillon : id==="sounds" ? S.sounds : null;
+  const m = {regions:S.regions, tracks:S.tracks, classes:S.classes, items:S.items, events:S.events, sides:S.sides, planets:S.planets}[col];
+  return m ? m.get(id) : null;
+}
+function save(path){ clearTimeout(timers[path]); delete timers[path]; const o = objAt(path); if(o) write(path, path.startsWith("settings/") ? clone(o) : bodyOf(o)); }
+function saveSoon(path){ clearTimeout(timers[path]); setStatus("Modifiche in corso…"); timers[path] = setTimeout(()=>save(path), 700); }
+const saveClass = c => save("classes/"+c.id);
+function addLog(c, text){ if(!text) return; c.log.push({ t:Date.now(), x:text }); if(c.log.length>300) c.log = c.log.slice(-300); }
+function mutate(fn, logText){ const c = cls(); if(!c) return; const txt = typeof logText==="function" ? logText(c) : logText; fn(c); addLog(c, txt); saveClass(c); renderAll(); }
+
+/* ---------------- game rules ---------------- */
+function freshClass(c){
+  const st = S.regions.has(S.settings.startRegion) ? S.settings.startRegion : regionList()[0]?.id;
+  Object.assign(c, { zones: st?{[st]:"liberated"}:{}, at:st||null, path:st?[st]:[], lanterns:3, items:[], pieces:[], ship:false, dragon:0, steps:{}, visited:[], loreSeen:[], planetsSeen:[], deckUsed:[], log:[], pending:null });
+  addLog(c, `La compagnia ${c.name} parte da casa: ${S.regions.get(st)?.name || "la città"}.`);
+}
+function drawEvent(c){
+  const all = sorted(S.events); if(!all.length) return null;
+  let pool = all.filter(e => !c.deckUsed.includes(e.id));
+  if(!pool.length){ c.deckUsed = []; pool = all; }
+  const e = pool[Math.floor(Math.random()*pool.length)]; c.deckUsed.push(e.id); return e;
+}
+function finishMove(c){ const to = c.pending.to; c.at = to; c.path.push(to); if(c.path.length>120) c.path = c.path.slice(-120); c.pending = null; }
+function startTravel(to){
+  const c = cls(), chk = travelCheck(c, to); if(!chk.ok){ toast(chk.reason); return; }
+  const r = S.regions.get(to);
+  if(chk.wall){ mutate(c => { c.lanterns -= chk.cost; c.pending = { to, from:c.at, cost:chk.cost, trial:false, eventId:null, step:"wall", wallText:chk.wallText||"" }; }, `In viaggio verso ${r.name}${chk.cost?` (${chk.cost} ${chk.cost===1?"lanterna":"lanterne"})`:""}${chk.ship?", con la nave":""}.`); closeView(); return; }
+  mutate(c => {
+    c.lanterns -= chk.cost;
+    const ev = drawEvent(c);
+    c.pending = { to, from:c.at, cost:chk.cost, trial:!!chk.trial, eventId: ev?.id || null, step: ev ? "event" : (chk.trial ? "camp" : "done") };
+    if(c.pending.step==="done") finishMove(c);
+  }, `In viaggio verso ${r.name}${chk.cost?` (${chk.cost} ${chk.cost===1?"lanterna":"lanterne"})`:""}${chk.ship?", con la nave":""}.`);
+  closeView();
+}
+function resolveEvent(apply){
+  const c0 = cls(), p0 = c0?.pending, ev = p0 && S.events.get(p0.eventId);
+  mutate(c => {
+    const p = c.pending; if(!p) return;
+    if(apply && ev && ev.lanterns) c.lanterns = Math.max(0, c.lanterns + ev.lanterns);
+    if(!p.to){ c.pending = null; return; }
+    if(p.trial) p.step = "camp"; else finishMove(c);
+  }, ev ? `Imprevisto: ${ev.title}${apply && ev.lanterns ? ` (${ev.lanterns>0?"+":""}${ev.lanterns} lanterne)` : ""}.${p0?.trial && p0?.to ? ` La compagnia si accampa alle porte di ${S.regions.get(p0.to)?.name||"una nuova zona"}.` : ""}` : null);
+}
+function resolveTrial(pass){
+  const c0 = cls(), p = c0?.pending; if(!p) return; const r = S.regions.get(p.to);
+  mutate(c => { if(pass){ c.zones[p.to] = "explored"; finishMove(c); } else c.pending = null; },
+    pass ? `Prova d'ingresso superata: la compagnia entra in ${r?.name}.` : `La nebbia ha respinto la compagnia da ${r?.name}: le lanterne sono perse.`);
+}
+function wallBack(){ const c0=cls(), r=S.regions.get(c0?.pending?.to); mutate(c => { c.pending = null; }, `La strada verso ${r?.name||"quella zona"} era sbarrata: la compagnia torna indietro e le lanterne sono perse.`); }
+function startTrial(){ const c=cls(); if(!c?.pending || c.pending.step!=="camp") return; mutate(c => { c.pending.step="trial"; }); }
+function cancelTravel(){ mutate(c => { if(!c.pending) return; c.lanterns += c.pending.cost||0; c.pending = null; }, "Viaggio annullato."); }
+function liberate(id){ const r = S.regions.get(id), note = r.piece>=1 && r.piece<=NP ? r.piece : 0; mutate(c => { c.zones[id] = "liberated"; c.steps[id] = r.steps.map(()=>true); for(const pl of sorted(S.planets)) if(planetLaunchRegion(pl)?.id===id && !c.planetsSeen.includes(pl.id)) c.planetsSeen.push(pl.id); if(note && !c.pieces.includes(note)) c.pieces.push(note); }, `${r.name} è libera!${note?` Avete trovato un appunto dell'allievo: ${noteName(note)}.`:""}${r.secret?" Un segreto è stato svelato.":""}`); if(r.lore && (REMOTE || S.drawerOpen)) toast("La pergamena di "+r.name+" è pronta: aprila dalla Regia quando vuoi."); }
+function openLore(id){ const r = S.regions.get(id), c = cls(); if(!r || !c) return; if(!c.loreSeen.includes(id)) mutate(c => { c.loreSeen.push(id); }, `Si è aperta la pergamena di ${r.name}.`); if(REMOTE) writeLive({card:"lore:"+id, cardN:Date.now()}); else openView({k:"lore", id}); }
+function setZone(id, z){
+  const r = S.regions.get(id);
+  mutate(c => { if(z) c.zones[id] = z; else { delete c.zones[id]; c.steps[id] = []; c.planetsSeen = c.planetsSeen.filter(pid => planetLaunchRegion(S.planets.get(pid)||{x:-1,y:-1})?.id!==id); if(c.pending?.to===id) c.pending = null; if(c.at===id){ const back = [...c.path].reverse().find(x => x!==id && c.zones[x]); c.at = back || null; } } },
+    z ? `${r.name} svelata dalla regia.` : `${r.name} è tornata nella nebbia.`);
+}
+function withUndo(msg, fn, logText){
+  const c=cls(); if(!c) return; const before=bodyOf(c);
+  fn(c); addLog(c, logText); saveClass(c); stopMusic(); closeView(); renderAll();
+  toast(msg, () => { const cc=S.classes.get(c.id); if(!cc) return; Object.assign(cc, normClass(c.id, before)); saveClass(cc); renderAll(); });
+}
+const startId = () => S.regions.has(S.settings.startRegion) ? S.settings.startRegion : regionList()[0]?.id;
+function fogAll(){ withUndo("La nebbia è tornata su tutta la mappa.", c => { const st=startId(); c.zones=st?{[st]:"liberated"}:{}; c.at=st||null; c.path=st?[st]:[]; c.pending=null; c.steps={}; c.planetsSeen=[]; }, "La nebbia è tornata su tutto il mondo: la compagnia riparte da casa e tutte le prove tornano da fare."); }
+function revealAll(){ withUndo("Tutta la mappa è svelata.", c => { regionList().forEach(r => { c.zones[r.id]="liberated"; c.steps[r.id]=r.steps.map(()=>true); }); c.planetsSeen=sorted(S.planets).map(p=>p.id); c.pending=null; }, "La regia ha svelato tutta la mappa: tutte le prove sono superate."); }
+function dragonStep(d){ const c=cls(); if(!c) return; const v=Math.max(0,Math.min(10,(c.dragon||0)+d)); mutate(c=>{ c.dragon=v; }, v>=10 && (c.dragon||0)<10 ? "Il dragone si è svegliato!" : null); }
+function dragonReset(){ withUndo("Il dragone vi ha rimandati a casa: si riparte da capo.", c => { const st=startId(); Object.assign(c, { zones: st?{[st]:"liberated"}:{}, at:st||null, path:st?[st]:[], lanterns:3, items:[], pieces:[], ship:false, dragon:0, steps:{}, visited:[], planetsSeen:[], pending:null }); }, "Il dragone è arrivato: la nebbia ha ricoperto tutto e la compagnia riparte da Portalume."); }
+function resetAdventure(){ withUndo("L'avventura ricomincia da capo.", c => { freshClass(c); }, null); }
+function addLanterns(n){
+  const c = cls(); if(!c) return; const bonus = 0;
+  mutate(c => { c.lanterns = Math.max(0, c.lanterns + n + bonus); }, n>0 ? `+${n+bonus} lanterne${bonus?" (bonus energia)":""}.` : null);
+  if(bonus) toast("Energia alta: una lanterna in più!");
+}
+function giveItem(itemId){ const it = S.items.get(itemId), c = cls(); if(!it || !c) return; mutate(c => { c.items.push(itemId); }, `Nello zaino: ${it.name}.`); }
+function useItem(i){ const c = cls(); const it = S.items.get(c?.items[i]); mutate(c => { c.items.splice(i,1); }, it ? `Usato: ${it.name}.` : null); closeView(); }
+function buyItem(sideId, itemId){
+  const it = S.items.get(itemId), c = cls(); if(!it || !c) return;
+  if(c.lanterns < it.price){ toast(`Servono ${it.price} lanterne.`); return; }
+  mutate(c => { c.lanterns -= it.price; c.items.push(itemId); if(!c.visited.includes(sideId)) c.visited.push(sideId); }, `Comprato dal mercante: ${it.name} (${it.price} lanterne).`);
+}
+function rewardSide(sideId, n){
+  const s = S.sides.get(sideId), c = cls(); if(!c) return; const bonus = 0;
+  mutate(c => { if(!c.visited.includes(sideId)) c.visited.push(sideId); c.lanterns += n + bonus; }, `${s?.name||"Area secondaria"}: +${n+bonus} lanterne${bonus?" (bonus energia)":""}.`);
+  if(bonus) toast("Energia alta: una lanterna in più!");
+}
+
+/* ---------------- board layout ---------------- */
+const board = $("#board"), svg = $("#svg"), fogC = $("#fog"), fctx = fogC.getContext("2d");
+const mask = document.createElement("canvas"), mctx = mask.getContext("2d");
+const tmp = document.createElement("canvas"), tctx = tmp.getContext("2d");
+let blurC = null;
+let L=0, T=0, BW=0, BH=0, WW=0, WH=0;
+const Z = { k:1, x:0, y:0 };
+function layout(){
+  const v=$("#view"); if(!v.clientWidth) return;
+  const th=$("#topbar").offsetHeight, bh=$("#botbar").offsetHeight, mwr=$("#mapwrap");
+  mwr.style.top=th+"px"; mwr.style.bottom=bh+"px"; const pv=$("#planetView"); pv.style.top=th+"px"; pv.style.bottom=bh+"px"; const dfx=$("#dragonfx"); dfx.style.top=th+"px"; dfx.style.bottom=bh+"px"; if(S.scene) sizePlanet(); v.style.setProperty("--botH", bh+"px");
+  WW=mwr.clientWidth; WH=mwr.clientHeight; if(!WW||!WH) return;
+  BW=Math.min(WW, WH*4/3); BH=BW*3/4; L=(WW-BW)/2; T=(WH-BH)/2;
+  Object.assign(board.style, { width:BW+"px", height:BH+"px", left:L+"px", top:T+"px" });
+  applyZ();
+  const fw = Math.max(320, Math.min(1100, Math.round(BW*0.55))), fh = Math.round(fw*3/4);
+  if(fogC.width !== fw){ fogC.width = mask.width = tmp.width = fw; fogC.height = mask.height = tmp.height = fh; maskDirty = true; buildBlur(); }
+}
+function applyZ(){
+  Z.k=Math.max(1,Math.min(4,Z.k));
+  const sw=BW*Z.k, sh=BH*Z.k;
+  Z.x = sw<=WW ? (WW-sw)/2-L : Math.min(-L, Math.max(WW-sw-L, Z.x));
+  Z.y = sh<=WH ? (WH-sh)/2-T : Math.min(-T, Math.max(WH-sh-T, Z.y));
+  board.style.transform=`translate(${Z.x}px,${Z.y}px) scale(${Z.k})`;
+  const zf=document.getElementById("zFit"); if(zf) zf.hidden = Z.k<=1.001;
+}
+function zoomAt(px, py, f){ const k2=Math.max(1,Math.min(4,Z.k*f)); const bx=(px-L-Z.x)/Z.k, by=(py-T-Z.y)/Z.k; Z.k=k2; Z.x=px-L-bx*k2; Z.y=py-T-by*k2; applyZ(); }
+function buildBlur(){
+  const img = $("#mapimg"); if(!img.complete || !img.naturalWidth || !fogC.width) return;
+  const bw = Math.max(48, Math.round(fogC.width/5)), bh = Math.round(bw*3/4);
+  const c = document.createElement("canvas"); c.width=bw; c.height=bh; const x=c.getContext("2d"); x.imageSmoothingQuality="high"; x.drawImage(img,0,0,bw,bh); blurC=c; lastFrame=0;
+}
+$("#mapimg").addEventListener("load", buildBlur);
+
+/* ---------------- fog ---------------- */
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed>>>15, 1|seed); t = t + Math.imul(t ^ t>>>7, 61|t) ^ t; return ((t ^ t>>>14)>>>0)/4294967296; }; }
+function cloudTile(size, seed, base){
+  const c=document.createElement("canvas"); c.width=c.height=size; const ctx=c.getContext("2d");
+  const img=ctx.createImageData(size,size), acc=new Float32Array(size*size), R=rng(seed); let amp=1, tot=0;
+  for(let o=0;o<5;o++){
+    const cells=base<<o, g=new Float32Array(cells*cells); for(let i=0;i<g.length;i++) g[i]=R(); const step=size/cells;
+    for(let y=0;y<size;y++){ const gy=y/step, y0=Math.floor(gy)%cells, y1=(y0+1)%cells; let ty=gy-Math.floor(gy); ty=ty*ty*(3-2*ty);
+      for(let x=0;x<size;x++){ const gx=x/step, x0=Math.floor(gx)%cells, x1=(x0+1)%cells; let tx=gx-Math.floor(gx); tx=tx*tx*(3-2*tx);
+        const a=g[y0*cells+x0], b=g[y0*cells+x1], c2=g[y1*cells+x0], d=g[y1*cells+x1]; acc[y*size+x]+=amp*((a+(b-a)*tx)+((c2+(d-c2)*tx)-(a+(b-a)*tx))*ty); } }
+    tot+=amp; amp*=0.5;
+  }
+  for(let i=0;i<acc.length;i++){ const n=acc[i]/tot, a=Math.max(0,Math.min(1,(n-0.38)*2.4)); img.data[i*4]=206; img.data[i*4+1]=216; img.data[i*4+2]=218; img.data[i*4+3]=Math.round(a*255); }
+  ctx.putImageData(img,0,0); return c;
+}
+const patA = fctx.createPattern(cloudTile(256,7,3),"repeat"), patB = fctx.createPattern(cloudTile(256,19,2),"repeat");
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let shown = new Map(); // id -> {from,to,start}
+let maskDirty = true, lastClassForFog = null, lastFrame = 0;
+function targetLevel(c, id){ const z = zoneOf(c,id); if(z==="liberated") return 1; if(z==="explored") return EXPL; if(c?.pending && c.pending.to===id && (c.pending.step==="trial" || c.pending.step==="camp" || c.pending.step==="wall")) return TRIAL; return 0; }
+function prog(s, now){ if(s.from===s.to) return s.to; const dur = 600 + 2200*Math.abs(s.to-s.from); let t=Math.min(1,(now-s.start)/dur); t = s.to>s.from ? 1-Math.pow(1-t,3) : t*t; return s.from+(s.to-s.from)*t; }
+function syncFog(animate){
+  const c = cls(), now = performance.now();
+  const ups = animate ? regionList().filter(r => { const s=shown.get(r.id), t=targetLevel(c,r.id); return t > (s?s.to:0); }).length : 0;
+  for(const r of regionList()){
+    const tgt = targetLevel(c, r.id), s = shown.get(r.id);
+    if(!animate){ shown.set(r.id, {from:tgt, to:tgt, start:0}); continue; }
+    if(!s || s.to !== tgt){
+      const cur = s ? prog(s, now) : 0, prevTo = s ? s.to : 0;
+      shown.set(r.id, {from:cur, to:tgt, start:now});
+      if(tgt>prevTo && tgt>=EXPL) justRevealed(r.id);
+      if(!REMOTE && ups<=1){
+        if(tgt===1 && prevTo<1 && c?.at===r.id) playRegion(r.id);
+        else if(tgt===EXPL && prevTo<EXPL && !r.quiet && c?.at===r.id) playRegion(r.id);
+      }
+      if(!REMOTE && tgt<prevTo && tgt<EXPL){ if(nowPlaying===r.id) stopMusic(); if(S.view?.id===r.id) closeView(); }
+    }
+  }
+  for(const id of [...shown.keys()]) if(!S.regions.has(id)) shown.delete(id);
+  maskDirty = true;
+}
+function polyPath(ctx, pts, k, off){ ctx.beginPath(); pts.forEach(([x,y],i)=> i? ctx.lineTo(x*k-off,y*k) : ctx.moveTo(x*k-off,y*k)); ctx.closePath(); }
+function stampUnion(ids){
+  const w=tmp.width, h=tmp.height, k=w/VW, OFF=w*3; tctx.setTransform(1,0,0,1,0,0); tctx.clearRect(0,0,w,h);
+  tctx.shadowColor="#000"; tctx.shadowBlur=Math.max(6,w*0.018); tctx.shadowOffsetX=OFF; tctx.fillStyle=tctx.strokeStyle="#000"; tctx.lineJoin="round"; tctx.lineWidth=Math.max(10,w*0.03);
+  for(const id of ids){ const r=S.regions.get(id); if(!r) continue; const pts=polyPts(r); if(pts.length<3) continue; polyPath(tctx,pts,k,OFF); tctx.fill(); tctx.stroke(); }
+  tctx.shadowColor="transparent";
+}
+function drawMask(now){
+  const w=mask.width, h=mask.height, k=w/VW, OFF=w*3; mctx.setTransform(1,0,0,1,0,0); mctx.clearRect(0,0,w,h); mctx.globalAlpha=1;
+  let animating=false; const statics=[], anims=[];
+  for(const [id,s] of shown){ const p = reduced ? s.to : prog(s, now);
+    if(s.from!==s.to && Math.abs(p-s.to)>0.001){ animating=true; anims.push([id,p]); }
+    else { if(s.from!==s.to) s.from=s.to; if(s.to>0) statics.push([id,s.to]); } }
+  // layered unions so that the remaining fog is 1 - max(level) even where regions overlap
+  const layers=[[TRIAL,TRIAL],[EXPL,(EXPL-TRIAL)/(1-TRIAL)],[1,1]];
+  for(const [thr,a] of layers){ const ids = statics.filter(([,l])=>l>=thr-1e-6).map(([id])=>id); if(!ids.length) continue; stampUnion(ids); mctx.globalAlpha=a; mctx.drawImage(tmp,0,0); }
+  for(const [id,p] of anims){ if(p<=0.002) continue; const r=S.regions.get(id); const pts=r?polyPts(r):[]; if(pts.length<3) continue;
+    mctx.save(); mctx.globalAlpha=p; mctx.shadowColor="#000"; mctx.shadowBlur=Math.max(6,w*0.018)+(1-p)*w*0.05; mctx.shadowOffsetX=OFF; mctx.fillStyle=mctx.strokeStyle="#000"; mctx.lineJoin="round"; mctx.lineWidth=Math.max(10,w*0.03); polyPath(mctx,pts,k,OFF); mctx.fill(); mctx.stroke(); mctx.restore(); }
+  mctx.globalAlpha=1; return animating;
+}
+function frame(now){
+  requestAnimationFrame(frame);
+  if(S.scene && !REMOTE && !document.hidden){ planetFrame(now); return; }
+  if(REMOTE || document.hidden || now-lastFrame < 33) return;
+  if(reduced && !maskDirty && lastFrame) return;
+  lastFrame = now;
+  if(maskDirty) maskDirty = drawMask(now);
+  const w=fogC.width, h=fogC.height, t=now/1000, c0=cls();
+  const allFree = c0 && S.regions.size>0 && regionList().every(r => zoneOf(c0,r.id)==="liberated");
+  if(allFree && !maskDirty){ fctx.setTransform(1,0,0,1,0,0); fctx.clearRect(0,0,w,h); return; }
+  fctx.setTransform(1,0,0,1,0,0); fctx.globalCompositeOperation="source-over"; fctx.globalAlpha=1; fctx.clearRect(0,0,w,h);
+  if(blurC){ fctx.imageSmoothingEnabled=true; fctx.imageSmoothingQuality="high"; fctx.drawImage(blurC,0,0,w,h); fctx.fillStyle="rgba(24,36,39,0.62)"; } else fctx.fillStyle="rgba(26,38,41,0.95)";
+  fctx.fillRect(0,0,w,h);
+  const sA=w*0.42/256, sB=w*0.85/256, dA=reduced?0:t*w*0.012, dB=reduced?0:t*w*0.007;
+  try{ patA.setTransform(new DOMMatrix([sA,0,0,sA,dA,dA*0.3])); patB.setTransform(new DOMMatrix([sB,0,0,sB,-dB,dB*0.5])); }catch{}
+  fctx.globalAlpha=0.42; fctx.fillStyle=patA; fctx.fillRect(0,0,w,h);
+  fctx.globalAlpha=0.3; fctx.fillStyle=patB; fctx.fillRect(0,0,w,h);
+  fctx.globalAlpha=1; fctx.globalCompositeOperation="destination-out"; fctx.drawImage(mask,0,0);
+}
+
+/* ---------------- audio ---------------- */
+const bgm = $("#bgm"), car = $("#car"); let fadeT=null, nowPlaying=null, curAudio=null, curLabel=null;
+// smooth fades through Web Audio (stepping element.volume causes audible crackle)
+let AC=null, G=null, F=null, M=null, muffOn=false;
+function ensureAC(){
+  if(AC || REMOTE) return; const Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx) return;
+  try{ AC=new Ctx(); const src=AC.createMediaElementSource(bgm); G=AC.createGain(); G.gain.value=0; F=AC.createBiquadFilter(); F.type="lowpass"; F.Q.value=0.6; F.frequency.value=20000; M=AC.createGain(); M.gain.value=1; src.connect(F); F.connect(M); M.connect(G); G.connect(AC.destination); bgm.volume=1; }catch{ AC=null; G=null; F=null; M=null; }
+}
+document.addEventListener("pointerdown", () => { ensureAC(); if(AC && AC.state==="suspended") AC.resume().catch(()=>{}); }, true);
+document.addEventListener("keydown", () => { ensureAC(); if(AC && AC.state==="suspended") AC.resume().catch(()=>{}); }, true);
+// a region not yet liberated plays its music as if heard through the smoke
+function applyMuffle(animate, force){
+  if(!F) return; const want = !!nowPlaying && S.regions.has(nowPlaying) && zoneOf(cls(), nowPlaying)!=="liberated";
+  if(want===muffOn && !force) return; muffOn = want;
+  const t=AC.currentTime, dur = animate ? (want ? 1.5 : 4.5) : 0.03;
+  F.frequency.cancelScheduledValues(t); F.frequency.setValueAtTime(Math.max(40,F.frequency.value), t); F.frequency.exponentialRampToValueAtTime(want ? 450 : 20000, t+dur);
+  M.gain.cancelScheduledValues(t); M.gain.setValueAtTime(M.gain.value, t); M.gain.linearRampToValueAtTime(want ? 0.72 : 1, t+dur);
+}
+function setVol(v){ if(G){ const t=AC.currentTime; G.gain.cancelScheduledValues(t); G.gain.setValueAtTime(v,t); } else bgm.volume=v; }
+function fadeTo(vol, ms, done){
+  clearInterval(fadeT); clearTimeout(fadeT);
+  if(G){ if(AC.state==="suspended") AC.resume().catch(()=>{}); const t=AC.currentTime, from=G.gain.value; G.gain.cancelScheduledValues(t); G.gain.setValueAtTime(from,t); G.gain.linearRampToValueAtTime(Math.max(0,Math.min(1,vol)), t+ms/1000); fadeT=setTimeout(()=>{ done&&done(); }, ms+40); return; }
+  const start=bgm.volume, t0=performance.now(); fadeT=setInterval(()=>{ const p=Math.min(1,(performance.now()-t0)/ms); bgm.volume=Math.max(0,Math.min(1,start+(vol-start)*p)); if(p>=1){ clearInterval(fadeT); done&&done(); } }, 16);
+}
+const audioCache = new Map();
+function audioUrl(o){
+  if(o.audioEnc!=="b64") return Promise.resolve("/_blob/"+o.audioId);
+  if(!audioCache.has(o.audioId)){
+    const p = (async () => {
+      const res = await fetch("/_blob/"+o.audioId); if(!res.ok) throw new Error("http "+res.status);
+      const txt = await res.text(); const m = /^data:([^;,]+);base64,/.exec(txt); if(!m) throw new Error("formato");
+      try{ const bin=atob(txt.slice(m[0].length)), u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); return URL.createObjectURL(new Blob([u8],{type:m[1]})); }catch{ return txt; }
+    })();
+    p.catch(()=>audioCache.delete(o.audioId)); audioCache.set(o.audioId, p);
+  }
+  return audioCache.get(o.audioId);
+}
+async function playTrack(key, o, label){
+  if(REMOTE || !o || !o.audioId) return;
+  nowPlaying = key; renderCardButtons();
+  if(S.muted) return;
+  if(curAudio===o.audioId && !bgm.paused) return;
+  if(curAudio===o.audioId && bgm.paused && bgm.getAttribute("src")){ ensureAC(); applyMuffle(false,true); bgm.play().then(()=>fadeTo(S.vol,800)).catch(()=>{}); return; }
+  if(!audioCache.has(o.audioId) && o.audioEnc==="b64") toast("Carico il brano…");
+  let src; try{ src = await audioUrl(o); }catch{ toast("Non riesco a caricare il brano."); return; }
+  if(nowPlaying!==key) return;
+  pauseCarillon();
+  const start = () => { curAudio=o.audioId; curLabel=label; bgm.src=src; bgm.loop = !(S.regions.has(key) && regionTracks(key).length>1); ensureAC(); applyMuffle(false,true); setVol(0); bgm.play().then(()=>{ fadeTo(S.vol,1500); $("#toast").hidden=true; }).catch(()=>toast("Tocca una volta la mappa sulla LIM per attivare la musica.")); };
+  if(!bgm.paused) fadeTo(0,600,start); else start();
+}
+// a region's music plays only where the company stands
+let lastAtKey=null;
+function playHere(){ if(REMOTE || S.scene) return; const c=cls(), r=c && S.regions.get(c.at), z=r && zoneOf(c, r.id); if(r && regionTracks(r.id).length && (z==="liberated" || (z==="explored" && !r.quiet))) playRegion(r.id); else if(nowPlaying && S.regions.has(nowPlaying)) stopMusic(); }
+const regionTracks = id => sorted(S.tracks).filter(t => t.audioId && t.regions.includes(id));
+function playRegion(id){ const r = S.regions.get(id), list = regionTracks(id); if(!r || !list.length) return; const t = list[(S.plIdx[id]||0) % list.length]; playTrack(id, t, { name:t.name||r.name, color:r.color }); }
+bgm.addEventListener("ended", () => { const id=nowPlaying; if(!id || !S.regions.has(id)) return; const n=regionTracks(id).length; if(n<2) return; S.plIdx[id]=((S.plIdx[id]||0)+1)%n; curAudio=null; playRegion(id); });
+function stopMusic(){ nowPlaying=null; curAudio=null; const end=()=>{ bgm.pause(); if(!curAudio){ curLabel=null; renderPlayer(); } }; if(!bgm.paused) fadeTo(0,700,end); else end(); renderCardButtons(); }
+function renderMute(){}
+function toggleMute(){ if(curLabel) $("#plToggle").click(); }
+function renderPlayer(){
+  const pl=$("#player"); pl.hidden = !curLabel || REMOTE; if(!curLabel) return;
+  $("#plName").innerHTML = `<span class="pl-dot" style="background:${esc(curLabel.color)}"></span>${esc(curLabel.name||"Brano")}`;
+  const b=$("#plToggle"); b.innerHTML = bgm.paused ? I.play : I.pause; b.setAttribute("aria-label", bgm.paused?"Riprendi":"Pausa");
+  const v=$("#plVol"); if(document.activeElement!==v) v.value=Math.round(S.vol*100);
+}
+$("#plToggle").onclick = () => { if(bgm.paused){ if(S.muted){ S.muted=false; ls.set("mappa.muted",false); renderMute(); } ensureAC(); setVol(0); bgm.play().then(()=>fadeTo(S.vol,600)).catch(()=>{}); } else fadeTo(0,400,()=>bgm.pause()); };
+let volT=null;
+function setVolume(v, fromLive){ S.vol=Math.max(0,Math.min(1,v)); ls.set("mappa.vol",S.vol); clearInterval(fadeT); clearTimeout(fadeT); if(!bgm.paused) fadeTo(S.vol,120); renderPlayer(); if(!fromLive){ clearTimeout(volT); volT=setTimeout(()=>writeLive({vol:S.vol}),400); } }
+$("#plVol").addEventListener("input", e => setVolume(e.target.value/100));
+const fmtT = t => { t=Math.max(0,Math.floor(t||0)); return Math.floor(t/60)+":"+String(t%60).padStart(2,"0"); };
+let seeking=false;
+function showPos(){ const d=bgm.duration, k=d&&isFinite(d)?bgm.currentTime/d:0, sk=$("#plSeek"); if(!seeking) sk.value=Math.round(k*1000); sk.style.setProperty("--pct",(sk.value/10)+"%"); $("#plTime").textContent=fmtT(bgm.currentTime)+(d&&isFinite(d)?" / "+fmtT(d):""); }
+bgm.addEventListener("timeupdate", showPos); bgm.addEventListener("loadedmetadata", showPos);
+$("#plSeek").addEventListener("input", e => { seeking=true; const d=bgm.duration; if(d&&isFinite(d)){ bgm.currentTime=e.target.value/1000*d; } e.target.style.setProperty("--pct",(e.target.value/10)+"%"); $("#plTime").textContent=fmtT(bgm.currentTime)+(d&&isFinite(d)?" / "+fmtT(d):""); });
+$("#plSeek").addEventListener("change", () => { seeking=false; showPos(); });
+$("#plRestart").onclick = () => { bgm.currentTime=0; showPos(); if(bgm.paused){ ensureAC(); setVol(0); bgm.play().then(()=>fadeTo(S.vol,600)).catch(()=>{}); } };
+bgm.addEventListener("play", ()=>{ renderCardButtons(); renderPlayer(); }); bgm.addEventListener("pause", ()=>{ renderCardButtons(); renderPlayer(); });
+
+/* appunti dell'allievo: the student's song in 4 pieces; pieces not yet found play as silence */
+let carRAF=null;
+function carSegments(){ const st=(S.carillon.starts||[]); const out=[]; for(let i=0;i<NP;i++){ const a=st[i]; if(typeof a!=="number"||isNaN(a)) return null; out.push(a); } return out; }
+async function playCarillon(){
+  if(REMOTE) return; const o=S.carillon; if(!o.audioId){ toast("La canzone dell'allievo è ancora muta: caricala in Regia → Contenuti → Appunti."); return; }
+  const segs = carSegments(); if(!segs){ toast("Segna dove inizia ognuno dei 4 appunti in Regia → Contenuti → Appunti."); return; }
+  let src; try{ src = await audioUrl(o); }catch{ toast("Non riesco a caricare la canzone dell'allievo."); return; }
+  if(!bgm.paused) fadeTo(0,500,()=>bgm.pause());
+  if(car.getAttribute("src")!==src) car.src=src;
+  car.currentTime = segs[0]; car.volume = 0; $("#carillon").classList.add("playing");
+  try{ await car.play(); }catch{ $("#carillon").classList.remove("playing"); toast("Tocca una volta la mappa sulla LIM per attivare la musica."); return; }
+  const have = new Set(cls()?.pieces||[]);
+  const tick = () => {
+    if(car.paused){ $("#carillon").classList.remove("playing"); markCell(-1); return; }
+    const t=car.currentTime; let idx=-1; for(let i=0;i<NP;i++) if(t>=segs[i]) idx=i;
+    car.volume = (idx>=0 && have.has(idx+1) && !S.muted) ? S.vol : 0; markCell(idx);
+    carRAF = requestAnimationFrame(tick);
+  };
+  cancelAnimationFrame(carRAF); tick();
+}
+function pauseCarillon(){ if(!car.paused) car.pause(); }
+car.addEventListener("ended", ()=>{ $("#carillon").classList.remove("playing"); markCell(-1); });
+function markCell(i){ document.querySelectorAll("#cells .cell").forEach((el,k)=>el.classList.toggle("now", k===i && el.classList.contains("on"))); }
+$("#carillon").onclick = () => car.paused ? playCarillon() : pauseCarillon();
+$("#carillon").onkeydown = e => { if(e.key==="Enter"||e.key===" "){ e.preventDefault(); $("#carillon").click(); } };
+
+/* ---------------- svg ---------------- */
+const NS="http://www.w3.org/2000/svg";
+const glowStart = new Map();
+function justRevealed(id){ const t0=performance.now(); glowStart.set(id,t0); requestAnimationFrame(renderSvg); setTimeout(()=>{ if(glowStart.get(id)===t0){ glowStart.delete(id); const el=$(`#gRegions [data-id="${CSS.escape(id)}"]`); if(el) el.classList.remove("glow"); } },3300); }
+const editing = () => S.drawerOpen && S.tab==="mappa" && !REMOTE;
+function renderSvg(){
+  const c=cls(), ed=editing(), tnow=performance.now();
+  const gR=$("#gRegions"), gT=$("#gTrail"), gL=$("#gLabels"), gP=$("#gPins"), gK=$("#gToken"), gE=$("#gEdit");
+  gR.innerHTML=gT.innerHTML=gL.innerHTML=gP.innerHTML=gK.innerHTML=gE.innerHTML="";
+  const near = c?.at ? adjacency().get(c.at) : null;
+  for(const r of regionList()){
+    const pts=polyPts(r); if(pts.length<3) continue; const z=zoneOf(c,r.id);
+    const p=document.createElementNS(NS,"polygon"); p.setAttribute("points",ptsAttr(pts)); p.dataset.id=r.id;
+    const gs=glowStart.get(r.id), glow=gs!=null && z && tnow-gs<3200;
+    p.setAttribute("class","reg"+(z?" open":"")+(!z && (near?.has(r.id)||c?.ship)?" reach":"")+(ed&&S.sel===r.id?" sel":"")+(glow?" glow":""));
+    if(glow) p.style.animationDelay=(-(tnow-gs))+"ms";
+    gR.appendChild(p);
+    const camp = !z && c?.pending?.to===r.id && (c.pending.step==="camp"||c.pending.step==="trial");
+    if(z || ed || camp){ const [x,y]=anchor(r); const t=document.createElementNS(NS,"text"); t.setAttribute("x",x); t.setAttribute("y",y); t.setAttribute("class","lbl"+(z==="explored"||camp?" dim":"")); t.dataset.id=r.id; t.textContent=r.name||"Senza nome"; gL.appendChild(t); }
+  }
+  if(c && !ed && c.path.length>1){
+    const pts=c.path.filter(id=>S.regions.has(id)).map(id=>{ const [x,y]=anchor(S.regions.get(id)); return [x,y+46]; });
+    const pl=document.createElementNS(NS,"polyline"); pl.setAttribute("points",ptsAttr(pts)); pl.setAttribute("class","trail"); gT.appendChild(pl);
+  }
+  for(const pl of sorted(S.planets)){
+    if(!ed && !planetReady(c, pl)) continue;
+    const g=document.createElementNS(NS,"g"); g.setAttribute("class","rocketpin"+(ed&&S.selPlanet===pl.id?" sel":"")); g.dataset.planet=pl.id; g.setAttribute("transform",`translate(${pl.x*VW},${pl.y*VH})`);
+    g.innerHTML=`<circle class="halo" r="54"></circle><circle class="core" r="36" fill="#2a1858" stroke="#c39cf0" stroke-width="5"></circle><g transform="translate(-18,-22) scale(1.5)" fill="none" stroke="#efe4ff" stroke-width="2.2" stroke-linejoin="round"><path d="M12 2c3 3 4 7 3 12H9C8 9 9 5 12 2z"/><path d="M9 14l-3 3 3 1M15 14l3 3-3 1M11 18l1 4 1-4"/><circle cx="12" cy="9" r="1.6"/></g>`;
+    gP.appendChild(g);
+  }
+  for(const s of sorted(S.sides)){
+    if(!ed){ const reg=regionAt(s.x,s.y); if(!reg || !zoneOf(c,reg.id)) continue; }
+    const x=s.x*VW, y=s.y*VH, done=c?.visited.includes(s.id);
+    const g=document.createElementNS(NS,"g"); g.setAttribute("class","pin"+(done?" done":"")+(ed&&S.selSide===s.id?" sel":"")); g.dataset.side=s.id; g.setAttribute("transform",`translate(${x},${y})`);
+    g.innerHTML=`<circle class="halo" r="46"></circle><circle class="core" r="30"></circle><text>${s.kind==="mercante"?"$":(done?"✓":"?")}</text>`;
+    gP.appendChild(g);
+  }
+  if(c?.at && S.regions.has(c.at) && !ed){
+    const rr=S.regions.get(c.at), [ax,ay]=anchor(rr), half=Math.min(300,(rr.name||"").length*13+30), x=ax-half-40, y=ay+30;
+    gK.innerHTML=`<g class="token" transform="translate(${x},${y})"><g class="bob"><ellipse cx="0" cy="4" rx="30" ry="9" fill="rgba(0,0,0,.35)"/><line x1="0" y1="0" x2="0" y2="-110" stroke="#2b2418" stroke-width="7" stroke-linecap="round"/><path d="M3 -108 L86 -92 L3 -64 Z" fill="#e3b75a" stroke="#2b2418" stroke-width="5" stroke-linejoin="round"/><circle cx="0" cy="-114" r="9" fill="#efe4c8" stroke="#2b2418" stroke-width="4"/><text x="32" y="-78" class="lbl" style="font-size:28px">${esc(c.name)}</text></g></g>`;
+  }
+  if(ed){
+    if(S.drawing){
+      const pts=S.drawing.map(([x,y])=>[x*VW,y*VH]);
+      if(pts.length>1){ const pl=document.createElementNS(NS,"polygon"); pl.setAttribute("points",ptsAttr(pts)); pl.setAttribute("class","draft"); gE.appendChild(pl); }
+      pts.forEach((p,i)=>{ const ci=document.createElementNS(NS,"circle"); ci.setAttribute("cx",p[0]); ci.setAttribute("cy",p[1]); ci.setAttribute("r",i===0?16:11); ci.setAttribute("class","draft-pt"+(i===0?" first":"")); gE.appendChild(ci); });
+    } else if(S.mtab==="regioni" && S.sel && S.regions.has(S.sel)){
+      polyPts(S.regions.get(S.sel)).forEach((p,i)=>{ const ci=document.createElementNS(NS,"circle"); ci.setAttribute("cx",p[0]); ci.setAttribute("cy",p[1]); ci.setAttribute("r",15); ci.setAttribute("class","handle"); ci.dataset.i=i; gE.appendChild(ci); });
+    }
+  }
+}
+function svgPoint(ev){ const pt=svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; const m=svg.getScreenCTM(); if(!m) return [0,0]; const q=pt.matrixTransform(m.inverse()); return [Math.max(0,Math.min(1,q.x/VW)), Math.max(0,Math.min(1,q.y/VH))]; }
+let drag=null;
+// edit-mode drags of outline points and labels start here and stop the map from panning
+svg.addEventListener("pointerdown", ev => {
+  if(!editing() || S.drawing || S.placing) return;
+  const h=ev.target.closest(".handle"); if(h){ drag={kind:"pt", id:S.sel, i:+h.dataset.i}; svg.setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation(); return; }
+  const lb=ev.target.closest(".lbl"); if(lb){ drag={kind:"lbl", id:lb.dataset.id}; S.sel=lb.dataset.id; svg.setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation(); }
+});
+// a tap (no drag) on the map
+function onTap(ev){
+  const ed=editing(), [nx,ny]=svgPoint(ev), r4 = v => +v.toFixed(4);
+  if(ed && S.placing==="planet"){ const pl=S.planets.get(S.selPlanet); if(pl){ pl.x=r4(nx); pl.y=r4(ny); save("planets/"+pl.id); } S.placing=null; document.body.classList.remove("placing"); renderAll(); return; }
+  if(ed && S.placing==="side"){ const s=S.sides.get(S.selSide); if(s){ s.x=r4(nx); s.y=r4(ny); save("sides/"+s.id); } S.placing=null; document.body.classList.remove("placing"); renderAll(); return; }
+  if(ed && S.drawing){
+    if(S.drawing.length>=3){ const [fx,fy]=S.drawing[0]; if(Math.hypot((nx-fx)*VW,(ny-fy)*VH)<30/Z.k){ finishDrawing(); return; } }
+    S.drawing.push([r4(nx),r4(ny)]); renderSvg(); renderDrawer(true); return;
+  }
+  const tgt=ev.target && ev.target.closest ? ev.target : null; if(!tgt) return;
+  const pin=tgt.closest(".pin");
+  if(pin){ if(ed){ S.mtab="aree"; S.selSide=pin.dataset.side; renderAll(); } else openView({k:"side", id:pin.dataset.side}); return; }
+  const rk=tgt.closest(".rocketpin");
+  if(rk){ if(ed){ S.mtab="pianeti"; S.selPlanet=rk.dataset.planet; renderAll(); } else openView({k:"launch", id:rk.dataset.planet}); return; }
+  const poly=tgt.closest(".reg"); if(!poly) return; const id=poly.dataset.id;
+  if(ed){ S.sel=id; S.mtab="regioni"; renderAll(); return; }
+  const c=cls(); if(!c) return;
+  if(c.pending){ if(c.pending.step==="camp"){ if(c.pending.to===id) startTrial(); else if(zoneOf(c,id)) openView({k:"region", id}); else toast(`La compagnia è accampata alle porte di ${S.regions.get(c.pending.to)?.name}: tocca lì per la prova d'ingresso.`); } return; }
+  if(zoneOf(c,id)) openView({k:"region", id}); else openView({k:"confirm", id});
+}
+const mw=$("#mapwrap"), ptrs=new Map(); let gest=null, lpT=null, noTap=false;
+mw.addEventListener("pointerdown", e => {
+  if(!$("#ctx").hidden){ closeCtx(); noTap=true; return; }
+  if(e.button===2) return;
+  if(e.isPrimary){ ptrs.clear(); gest=null; clearTimeout(lpT); }
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); try{ mw.setPointerCapture(e.pointerId); }catch{}
+  if(ptrs.size===1){ noTap=false; gest={type:"tap", sx:e.clientX, sy:e.clientY, lx:e.clientX, ly:e.clientY, ev:e, moved:false}; clearTimeout(lpT);
+    if(e.pointerType!=="mouse") lpT=setTimeout(()=>{ if(gest && gest.type==="tap" && !gest.moved){ noTap=true; openCtx(gest.ev.clientX, gest.ev.clientY); } }, 650); }
+  else if(ptrs.size===2){ clearTimeout(lpT); const [a,b]=[...ptrs.values()]; gest={type:"pinch", d:Math.hypot(a.x-b.x,a.y-b.y)||1, cx:(a.x+b.x)/2, cy:(a.y+b.y)/2}; }
+});
+mw.addEventListener("pointermove", e => {
+  const p=ptrs.get(e.pointerId); if(!p) return; p.x=e.clientX; p.y=e.clientY;
+  if(gest?.type==="pinch" && ptrs.size>=2){ const [a,b]=[...ptrs.values()], d=Math.hypot(a.x-b.x,a.y-b.y)||1, cx=(a.x+b.x)/2, cy=(a.y+b.y)/2, r=mw.getBoundingClientRect();
+    Z.x+=cx-gest.cx; Z.y+=cy-gest.cy; zoomAt(cx-r.left, cy-r.top, d/gest.d); gest.d=d; gest.cx=cx; gest.cy=cy; return; }
+  if(gest?.type==="tap"){
+    if(!gest.moved && Math.hypot(e.clientX-gest.sx, e.clientY-gest.sy)>7){ gest.moved=true; clearTimeout(lpT); if(Z.k>1) mw.classList.add("panning"); }
+    if(gest.moved){ Z.x+=e.clientX-gest.lx; Z.y+=e.clientY-gest.ly; applyZ(); }
+    gest.lx=e.clientX; gest.ly=e.clientY;
+  }
+});
+function endPtr(e){
+  if(!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); clearTimeout(lpT);
+  if(gest?.type==="tap" && !gest.moved && !noTap && e.type==="pointerup") onTap(gest.ev);
+  if(gest?.type==="pinch") noTap=true;
+  if(!ptrs.size){ gest=null; mw.classList.remove("panning"); }
+}
+mw.addEventListener("pointerup", endPtr); mw.addEventListener("pointercancel", endPtr);
+window.addEventListener("pointerup", e => { if(ptrs.has(e.pointerId)) endPtr(e); }, true);
+window.addEventListener("pointercancel", e => { if(ptrs.has(e.pointerId)) endPtr(e); }, true);
+window.addEventListener("blur", () => { ptrs.clear(); gest=null; clearTimeout(lpT); mw.classList.remove("panning"); });
+mw.addEventListener("wheel", e => { e.preventDefault(); const r=mw.getBoundingClientRect(); zoomAt(e.clientX-r.left, e.clientY-r.top, Math.exp(-e.deltaY*0.0018)); }, {passive:false});
+mw.addEventListener("contextmenu", e => { e.preventDefault(); openCtx(e.clientX, e.clientY); });
+$("#zFit").onclick=()=>{ Z.k=1; applyZ(); };
+
+/* quick actions on a region, from right-click or long press */
+function openCtx(cx, cy){
+  if(editing() || REMOTE) return; const c=cls(); if(!c) return;
+  const el=document.elementFromPoint(cx, cy), poly=el && el.closest && el.closest(".reg"); if(!poly) return;
+  const id=poly.dataset.id, r=S.regions.get(id), z=zoneOf(c,id);
+  const acts=[];
+  if(c.pending?.step==="camp" && c.pending.to===id) acts.push(["trial","Inizia la prova d'ingresso"]);
+  if(z) acts.push(["card","Apri la scheda"]); else if(!c.pending) acts.push(["go","Viaggia qui"]);
+  if(z && c.at!==id) acts.push(["move","Sposta qui la compagnia"]);
+  if(z!=="liberated") acts.push(["free","Libera"]);
+  if(z!=="explored") acts.push(["explore", z?"Nebbia leggera":"Svela (nebbia leggera)"]);
+  if(z) acts.push(["fog","Rimetti la nebbia","warn"]);
+  const box=$("#ctx"); box.innerHTML=`<div class="t">${esc(r.name)}</div>`+acts.map(([a,l,k])=>`<button role="menuitem" class="${k||""}" data-cx="${a}" data-id="${esc(id)}">${l}</button>`).join("");
+  box.hidden=false; const vr=$("#view").getBoundingClientRect(), bw=box.offsetWidth, bh=box.offsetHeight;
+  box.style.left=Math.max(8,Math.min(vr.width-bw-8, cx-vr.left))+"px"; box.style.top=Math.max(8,Math.min(vr.height-bh-8, cy-vr.top))+"px";
+}
+function closeCtx(){ $("#ctx").hidden=true; }
+$("#ctx").addEventListener("click", e => {
+  const b=e.target.closest("[data-cx]"); if(!b) return; const a=b.dataset.cx, id=b.dataset.id, r=S.regions.get(id); closeCtx();
+  if(a==="card") openView({k:"region",id});
+  else if(a==="go") openView({k:"confirm",id});
+  else if(a==="move") mutate(c=>{ c.at=id; c.path.push(id); c.pending=null; }, `La compagnia si sposta a ${r.name}.`);
+  else if(a==="free") liberate(id);
+  else if(a==="explore") setZone(id,"explored");
+  else if(a==="trial") startTrial();
+  else if(a==="fog") setZone(id,null);
+});
+svg.addEventListener("pointermove", ev => {
+  if(!drag) return; const r=S.regions.get(drag.id); if(!r) return; const [x,y]=svgPoint(ev);
+  if(drag.kind==="pt"){ const p=r.poly.slice(); p[drag.i*2]=+x.toFixed(4); p[drag.i*2+1]=+y.toFixed(4); r.poly=p; const el=$(`#gRegions [data-id="${CSS.escape(r.id)}"]`); if(el) el.setAttribute("points",ptsAttr(polyPts(r))); const hd=$(`#gEdit .handle[data-i="${drag.i}"]`); if(hd){ hd.setAttribute("cx",x*VW); hd.setAttribute("cy",y*VH); } }
+  else { r.lx=+x.toFixed(4); r.ly=+y.toFixed(4); const t=$(`#gLabels [data-id="${CSS.escape(r.id)}"]`); if(t){ t.setAttribute("x",x*VW); t.setAttribute("y",y*VH); } }
+});
+const endDrag=()=>{ if(!drag) return; const r=S.regions.get(drag.id); drag=null; if(r){ save("regions/"+r.id); maskDirty=true; renderSvg(); } };
+svg.addEventListener("pointerup", endDrag); svg.addEventListener("pointercancel", endDrag);
+function finishDrawing(){ const r=S.regions.get(S.sel); if(r && S.drawing && S.drawing.length>=3){ r.poly=S.drawing.flat(); save("regions/"+r.id); maskDirty=true; toast("Confini salvati"); } S.drawing=null; document.body.classList.remove("drawing"); renderAll(); }
+
+/* ---------------- planets: a separate scene reached by rocket ---------------- */
+const pc=$("#planetCanvas"), px=pc.getContext("2d"); let PL=null;
+function planetLaunchRegion(p){ return regionAt(p.x, p.y); }
+function planetReady(c, p){ const r=planetLaunchRegion(p); if(!r) return true; const z=zoneOf(c, r.id); return z==="liberated" || (z==="explored" && trialsPassed(c, r) >= (p.after||0)); }
+// a region with a rocket can be liberated only after the company has been to its planet
+const trialTitle = (r,i) => String(r.steps[i]||"").split("\n")[0].trim() || `Prova ${i+1}`;
+const trialBody = (r,i) => String(r.steps[i]||"").split("\n").slice(1).join("\n").trim();
+function trialsPassed(c, r){ const a=c?.steps?.[r.id]||[]; let n=0; while(n<r.steps.length && a[n]) n++; return n; }
+function guardianOpen(c, r){ return trialsPassed(c,r)>=r.steps.length && !planetsPending(c,r).length; }
+function passTrial(rid, i){ const r=S.regions.get(rid); if(!r) return; mutate(c => { const a=(c.steps[rid]||[]).slice(); a[i]=true; for(let k=0;k<a.length;k++) a[k]=!!a[k]; c.steps[rid]=a; }, c => `${r.name}: prova superata, ${trialTitle(r,i)}.${i+1>=r.steps.length?" Ora vi aspetta la prova del guardiano.":""}`); toast("Prova superata.", () => unpassTrial(rid, i)); }
+function undoable(msg, fn, logText){ const c=cls(); if(!c) return; const before=bodyOf(c); mutate(fn, logText); toast(msg, () => { const cc=S.classes.get(c.id); if(!cc) return; Object.assign(cc, normClass(c.id, before)); saveClass(cc); renderAll(); }); }
+function dropNote(c, r){ if(r.piece){ const k=c.pieces.indexOf(r.piece); if(k>=0) c.pieces.splice(k,1); } }
+function unpassTrial(rid, i){ const r=S.regions.get(rid); if(!r) return; mutate(c => { const a=(c.steps[rid]||[]).slice(); for(let k=i;k<a.length;k++) a[k]=false; c.steps[rid]=a; }, `${r.name}: la prova "${trialTitle(r,i)}" torna da fare.`); }
+function failTrial(rid, i){ const r=S.regions.get(rid); if(!r) return; mutate(() => {}, `${r.name}: la prova "${trialTitle(r,i)}" si riprova la prossima volta.`); }
+function planetsPending(c, r){ return sorted(S.planets).filter(p => planetLaunchRegion(p)?.id===r.id && !(c?.planetsSeen||[]).includes(p.id)); }
+function planetInit(){
+  const R=rng(42), stars=[], craters=[];
+  for(let i=0;i<280;i++) stars.push({x:R(),y:R(),r:R()*1.4+0.3,tw:R()*6.28,sp:0.5+R()*1.5});
+  for(let i=0;i<34;i++){ const u=R()*2-1; craters.push({lat:Math.asin(u*0.92), lon:R()*Math.PI*2, s:0.04+R()*0.11, wind:R()<0.5}); }
+  PL={stars,craters,parts:[],last:0,t0:performance.now()};
+}
+function sizePlanet(){ const v=$("#planetView"), d=Math.min(1.75, window.devicePixelRatio||1); if(!v.clientWidth) return; pc.width=Math.round(v.clientWidth*d); pc.height=Math.round(v.clientHeight*d); }
+function drawRocket(ctx, x, y, ang, sc, t){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(ang); ctx.scale(sc,sc);
+  const fl=10+Math.sin(t*30)*3+Math.random()*3;
+  ctx.fillStyle="rgba(255,190,90,.9)"; ctx.beginPath(); ctx.moveTo(-18,-5); ctx.lineTo(-18-fl-8,0); ctx.lineTo(-18,5); ctx.fill();
+  ctx.fillStyle="rgba(255,240,180,.95)"; ctx.beginPath(); ctx.moveTo(-18,-3); ctx.lineTo(-18-fl,0); ctx.lineTo(-18,3); ctx.fill();
+  ctx.fillStyle="#2f8a5a"; ctx.beginPath(); ctx.moveTo(-14,-7); ctx.lineTo(-24,-15); ctx.lineTo(-8,-7); ctx.fill(); ctx.beginPath(); ctx.moveTo(-14,7); ctx.lineTo(-24,15); ctx.lineTo(-8,7); ctx.fill();
+  ctx.fillStyle="#efe4c8"; ctx.strokeStyle="#2b2418"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-18,-8); ctx.lineTo(10,-8); ctx.quadraticCurveTo(26,-6,30,0); ctx.quadraticCurveTo(26,6,10,8); ctx.lineTo(-18,8); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle="#2f8a5a"; ctx.beginPath(); ctx.moveTo(14,-7.5); ctx.quadraticCurveTo(26,-6,30,0); ctx.quadraticCurveTo(26,6,14,7.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#7fd0e8"; ctx.beginPath(); ctx.arc(2,0,4.2,0,6.283); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+function planetFrame(now){
+  if(!PL) planetInit(); if(!pc.width) sizePlanet(); if(!pc.width) return;
+  const ctx=px, w=pc.width, h=pc.height, t=now/1000, dt=Math.min(0.05,(now-(PL.last||now))/1000); PL.last=now;
+  const since=(now-PL.t0)/1000, warp=reduced?0:Math.max(0,1-since/1.8), ease=1-Math.pow(warp,2);
+  const bg=ctx.createRadialGradient(w*0.6,h*0.45,0,w*0.5,h*0.5,Math.max(w,h)*0.75); bg.addColorStop(0,"#1d1046"); bg.addColorStop(0.5,"#0e0828"); bg.addColorStop(1,"#05030f");
+  ctx.fillStyle=bg; ctx.fillRect(0,0,w,h);
+  for(const s of PL.stars){
+    const a=0.45+0.55*Math.sin(t*s.sp+s.tw), sx=s.x*w, sy=s.y*h;
+    if(warp>0.02){ const dx=sx-w/2, dy=sy-h/2, L2=warp*0.35; ctx.strokeStyle=`rgba(235,225,255,${(0.3+warp*0.6).toFixed(3)})`; ctx.lineWidth=s.r*(w/1200+0.6); ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx-dx*L2,sy-dy*L2); ctx.stroke(); }
+    else { ctx.fillStyle=`rgba(235,225,255,${(a*0.9).toFixed(3)})`; ctx.beginPath(); ctx.arc(sx,sy,s.r*(w/1200+0.6),0,6.283); ctx.fill(); }
+  }
+  const cr=pc.getBoundingClientRect(), sr=$("#pvSlot").getBoundingClientRect(), k=cr.width?w/cr.width:1;
+  const sx=(sr.left-cr.left)*k, sy=(sr.top-cr.top)*k, sw=Math.max(40,sr.width*k), sh=Math.max(40,sr.height*k);
+  const R=Math.max(12, Math.min(sh*0.4, sw/3.9))*(0.25+0.75*ease), cx=sx+sw/2, cy=sy+sh/2, tilt=-0.22, oa=t*0.42, orx=R*1.75, ory=R*0.42;
+  const rp=a=>{ const ox=Math.cos(a)*orx, oy=Math.sin(a)*ory; return [cx+ox*Math.cos(tilt)-oy*Math.sin(tilt), cy+ox*Math.sin(tilt)+oy*Math.cos(tilt)]; };
+  const [rx,ry]=rp(oa), [rx2,ry2]=rp(oa+0.01), behind=Math.sin(oa)<0, rang=Math.atan2(ry2-ry,rx2-rx), rsc=(behind?0.75:1.15)*R/170;
+  ctx.save(); ctx.globalAlpha=ease; ctx.translate(cx,cy); ctx.rotate(tilt); ctx.strokeStyle="rgba(200,170,255,.18)"; ctx.setLineDash([4,10]); ctx.lineWidth=Math.max(1,R/150); ctx.beginPath(); ctx.ellipse(0,0,orx,ory,0,0,6.283); ctx.stroke(); ctx.restore(); ctx.setLineDash([]);
+  if(behind) drawRocket(ctx,rx,ry,rang,rsc,t);
+  const halo=ctx.createRadialGradient(cx,cy,R*0.95,cx,cy,R*1.45); halo.addColorStop(0,"rgba(190,130,255,.45)"); halo.addColorStop(1,"rgba(120,60,220,0)"); ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(cx,cy,R*1.45,0,6.283); ctx.fill();
+  const body=ctx.createRadialGradient(cx-R*0.35,cy-R*0.4,R*0.1,cx,cy,R); body.addColorStop(0,"#c8a2f5"); body.addColorStop(0.55,"#8250d0"); body.addColorStop(1,"#3a1a78");
+  ctx.fillStyle=body; ctx.beginPath(); ctx.arc(cx,cy,R,0,6.283); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,R,0,6.283); ctx.clip();
+  const rot=t*0.06, vis=[];
+  for(const k of PL.craters){
+    const lon=k.lon+rot, x3=Math.cos(k.lat)*Math.sin(lon), y3=Math.sin(k.lat), z=Math.cos(k.lat)*Math.cos(lon); if(z<0.04) continue;
+    const X=cx+x3*R, Y=cy-y3*R, rr=k.s*R, ex=rr*Math.max(0.14,Math.sqrt(1-x3*x3)), ey=rr*Math.max(0.14,Math.sqrt(1-y3*y3));
+    ctx.fillStyle="rgba(46,16,96,.55)"; ctx.beginPath(); ctx.ellipse(X,Y,ex,ey,0,0,6.283); ctx.fill();
+    ctx.strokeStyle="rgba(230,205,255,.38)"; ctx.lineWidth=Math.max(1,rr*0.12); ctx.beginPath(); ctx.ellipse(X,Y,ex,ey,0,0.2,2.6); ctx.stroke();
+    ctx.fillStyle="rgba(20,6,50,.35)"; ctx.beginPath(); ctx.ellipse(X-ex*0.15,Y-ey*0.15,ex*0.7,ey*0.7,0,0,6.283); ctx.fill();
+    if(k.wind && z>0.35) vis.push([X,Y,rr]);
+  }
+  const shade=ctx.createRadialGradient(cx-R*0.5,cy-R*0.55,R*0.2,cx,cy,R*1.05); shade.addColorStop(0,"rgba(0,0,0,0)"); shade.addColorStop(0.7,"rgba(10,0,30,.18)"); shade.addColorStop(1,"rgba(10,0,30,.6)");
+  ctx.fillStyle=shade; ctx.fillRect(cx-R,cy-R,R*2,R*2); ctx.restore();
+  // the wind blows over the craters and the melody rises out of them as notes
+  if(!reduced && !warp && vis.length && Math.random() < dt*5){ const [X,Y,rr]=vis[Math.floor(Math.random()*vis.length)]; PL.parts.push({x:X,y:Y,vx:R*(0.25+Math.random()*0.3),vy:-R*(0.35+Math.random()*0.25),life:0,max:2.8+Math.random()*1.5,g:Math.random()<0.5?"♪":"♫",sz:rr*0.9+R*0.05,sw:Math.random()*6.28}); }
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  PL.parts=PL.parts.filter(p=>p.life<p.max);
+  for(const p of PL.parts){ p.life+=dt; p.x+=(p.vx+Math.sin(p.life*2+p.sw)*R*0.15)*dt; p.y+=p.vy*dt; const a=Math.sin(Math.min(1,p.life/p.max)*Math.PI);
+    ctx.strokeStyle=`rgba(225,205,255,${(a*0.35).toFixed(3)})`; ctx.lineWidth=Math.max(1,R/120); ctx.beginPath(); ctx.moveTo(p.x-p.vx*0.25,p.y-p.vy*0.25); ctx.quadraticCurveTo(p.x-p.vx*0.12+R*0.03,p.y-p.vy*0.1,p.x,p.y); ctx.stroke();
+    ctx.fillStyle=`rgba(245,232,255,${a.toFixed(3)})`; ctx.font=`${Math.round(p.sz)}px "IM Fell English SC", Georgia, serif`; ctx.fillText(p.g,p.x,p.y); }
+  if(!behind) drawRocket(ctx,rx,ry,rang,rsc,t);
+  if(warp>0){ ctx.fillStyle=`rgba(255,255,255,${(warp*warp*0.5).toFixed(3)})`; ctx.fillRect(0,0,w,h); }
+}
+function melodyHTML(txt){
+  let magic=false;
+  const note = t => { const w=t.replace(/[^A-Za-zÀ-ÿ#♭♯]/g,""); if(!w) return ""; const m=w.length>1 && w===w.toUpperCase(); if(m) magic=true; return `<span class="nt${m?" magic":""}">${esc(w.charAt(0).toUpperCase()+w.slice(1).toLowerCase())}</span>`; };
+  const rows = [];
+  String(txt||"").split("\n").map(l=>l.trim()).filter(Boolean).forEach((line,i)=>{
+    // a dash starts a new row; two spaces or a full stop separate groups inside a row
+    line.split(/\s*[-–—]\s*/).map(x=>x.trim()).filter(Boolean).forEach((part,j)=>{
+      const groups = part.split(/\s{2,}|\.\s+|\.$/).map(g=>g.trim()).filter(Boolean);
+      rows.push(`<div class="ml${j?" cont":""}"><span class="mn">${j?"":i+1}</span>${groups.map(g=>`<span class="mg">${g.split(/\s+/).map(note).join("")}</span>`).join("")}</div>`);
+    });
+  });
+  if(!rows.length) return "";
+  return `<div class="mh">La melodia del pianeta</div>${rows.join("")}${magic?`<div class="mleg"><span class="nt magic">La</span> la nota magica</div>`:""}`;
+}
+let melShown = true;
+function renderMelody(){
+  const p=S.planets.get(S.scene), html=p?melodyHTML(p.melody):"";
+  $("#pvMel").innerHTML=html; $("#pvMel").hidden=!html || !melShown; $("#pvMelTog").hidden=!html; $("#pvMelTog").textContent=melShown?"Nascondi la melodia":"Mostra la melodia";
+}
+$("#pvMelTog").onclick=()=>{ melShown=!melShown; renderMelody(); };
+function planetTrack(p){ if(p.audioId) return p; const r=planetLaunchRegion(p); return r ? (regionTracks(r.id)[0] || null) : null; }
+function setScene(id, fromLive, test){
+  if(id && !S.planets.has(id)) return;
+  S.scene=id||null; const v=$("#planetView");
+  if(!fromLive) writeLive({ scene:S.scene, sceneN:Date.now() });
+  closeView(); closeCtx();
+  if(S.scene){
+    const p=S.planets.get(id); $("#pvName").textContent=p.name||"Il pianeta"; $("#pvText").hidden=!p.text; $("#pvText").textContent=p.text||""; melShown=true; renderMelody();
+    v.hidden=REMOTE; PL=null; sizePlanet();
+    if(!fromLive && !test){ const c=cls(); if(c){ addLog(c, `Partenza con il razzo: ${p.name||"un pianeta"}.`); if(!c.planetsSeen.includes(id)) c.planetsSeen.push(id); saveClass(c); } }
+    const tr=planetTrack(p); if(tr && !REMOTE) playTrack("planet:"+id, tr, {name:p.name||"Il pianeta", color:"#a98be0"}); else stopMusic();
+  } else {
+    v.hidden=true; if(String(nowPlaying||"").startsWith("planet:")) stopMusic(); playHere(); lastFrame=0; maskDirty=true;
+  }
+  renderDrawer(true);
+}
+$("#pvBack").onclick = () => setScene(null);
+
+/* ---------------- HUD ---------------- */
+let lastLant = null, lastBag = null, lastBagCls = null, lastMsg = null, lastMsgCls = null, lastLv = 0;
+function renderHud(){
+  const c=cls();
+  $("#className").textContent = c ? c.name : "—";
+  $("#lantVal").innerHTML = `${I.lant}<span>${c?c.lanterns:0}</span>`;
+  if(c && lastLant!==null && c.lanterns!==lastLant){ const el=$("#lantVal"); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
+  lastLant = c ? c.lanterns : null;
+  const nIt = c ? c.items.length : 0, bn=$("#bagN"); bn.textContent = nIt; bn.classList.toggle("zero", !nIt);
+  $("#bagBtn").setAttribute("aria-label", `Apri lo zaino: ${nIt} ${nIt===1?"oggetto":"oggetti"}`);
+  if(c && lastBag!==null && lastBagCls===c.id && nIt>lastBag){ const bb=$("#bagBtn"); bb.classList.remove("bump"); void bb.offsetWidth; bb.classList.add("bump"); }
+  lastBag = c ? nIt : null; lastBagCls = c ? c.id : null;
+  $("#shipMark").hidden = !c?.ship;
+  const have = new Set(c?.pieces||[]);
+  $("#cells").innerHTML = NOTES.map(n=>`<span class="cell${have.has(n)?" on":""}" title="${esc(have.has(n)?noteName(n):"Appunto ancora da trovare")}">${have.has(n)?esc(noteName(n).charAt(0).toUpperCase()):""}</span>`).join("");
+  const en=$("#energy"), on=!!S.settings.energyEnabled && !!c; en.hidden=!on;
+  dragonFx(on && c ? Math.max(0,Math.min(10,c.dragon||0)) : 0, c?.id);
+  if(on){ const v=Math.max(0,Math.min(10,c.dragon||0)); $("#eBar").innerHTML=Array.from({length:10},(_,i)=>`<span class="e-seg${i<v?" on":""}"></span>`).join(""); en.classList.toggle("mid",v>=4&&v<7); en.classList.toggle("low",v>=7); const msg = v>=10?"Il dragone è sveglio!":v>=7?"Sta per svegliarsi…":v>=4?"Il dragone si agita":"Il dragone dorme", em=$("#eMsg"); if(em.textContent!==msg){ const changed = lastMsg!==null && lastMsgCls===c.id; em.textContent=msg; if(changed){ const lv=v>=10?3:v>=7?2:v>=4?1:0; if(lv>lastLv){ em.classList.remove("pop"); void em.offsetWidth; em.classList.add("pop"); dragonSound(lv); } } } lastMsg=msg; lastMsgCls=c.id; lastLv=v>=10?3:v>=7?2:v>=4?1:0; }
+}
+let dfxLast=null, dfxCls=null;
+function dragonFx(v, cid){
+  const fx=$("#dragonfx"); if(REMOTE){ fx.classList.remove("on"); return; }
+  const A=[0,0,0,.22,.3,.4,.48,.56,.64,.74,.8][v], P=[4,4,4,4.5,4,3.4,2.8,2,1.6,1.1,.8][v];
+  fx.style.setProperty("--a",A); fx.style.setProperty("--p",P+"s");
+  fx.classList.toggle("on", v>=4); fx.classList.toggle("hot", v>=7); fx.classList.toggle("peek", v>=9 && v<10);
+  if(dfxLast!==null && cid===dfxCls && v>dfxLast && v>=4){
+    const f=fx.querySelector(".flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go");
+    if(v>=7){ for(const id of ["#mapwrap","#planetView"]){ const el=$(id); el.classList.remove("rumble"); void el.offsetWidth; el.classList.add("rumble"); } }
+  }
+  dfxLast=v; dfxCls=cid;
+}
+// the dragon's voice, synthesized: a slow breath when it falls asleep, growls that grow up to a roar
+let noiseBuf=null;
+const sfx = new Audio();
+async function playSfx(o){ if(REMOTE || !o?.audioId) return; let src; try{ src=await audioUrl(o); }catch{ toast("Non riesco a caricare il suono."); return; } try{ sfx.pause(); sfx.src=src; sfx.currentTime=0; sfx.volume=Math.max(0,Math.min(1,S.vol)); await sfx.play(); }catch{} }
+function dragonSound(lv){
+  const own = S.sounds[SOUNDS[lv]?.[0]]; if(own && own.audioId){ playSfx(own); return; }
+  if(REMOTE || S.muted) return; ensureAC(); if(!AC) return; if(AC.state==="suspended") AC.resume().catch(()=>{});
+  const t=AC.currentTime+0.02, V=Math.max(0.05,S.vol);
+  if(!noiseBuf){ noiseBuf=AC.createBuffer(1, AC.sampleRate*2, AC.sampleRate); const d=noiseBuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; }
+  const out=AC.createGain(); out.gain.setValueAtTime(0.0001,t); out.connect(AC.destination);
+  const nz=AC.createBufferSource(); nz.buffer=noiseBuf; nz.loop=true; const nf=AC.createBiquadFilter(); nf.type="lowpass"; nz.connect(nf);
+  if(lv===0){
+    const d=2.2; nf.frequency.setValueAtTime(700,t); nf.frequency.exponentialRampToValueAtTime(120,t+d); nf.connect(out);
+    out.gain.linearRampToValueAtTime(0.18*V,t+0.6); out.gain.exponentialRampToValueAtTime(0.0001,t+d);
+    nz.start(t); nz.stop(t+d+0.1); setTimeout(()=>{ try{ out.disconnect(); }catch{} }, (d+0.6)*1000); return;
+  }
+  const P=[null,{d:1.3,f:75,a:0.45,cut:420},{d:2.2,f:60,a:0.7,cut:650},{d:3.4,f:52,a:1,cut:950}][lv];
+  const lp=AC.createBiquadFilter(); lp.type="lowpass"; lp.Q.value=5; lp.frequency.setValueAtTime(P.cut*0.5,t); lp.frequency.linearRampToValueAtTime(P.cut,t+P.d*0.3); lp.frequency.exponentialRampToValueAtTime(P.cut*0.35,t+P.d);
+  const trem=AC.createGain(); trem.gain.value=0.75; lp.connect(trem); trem.connect(out);
+  const lfo=AC.createOscillator(); lfo.frequency.value=lv===3?9:7; const lg=AC.createGain(); lg.gain.value=0.25; lfo.connect(lg); lg.connect(trem.gain);
+  const rough=AC.createOscillator(); rough.frequency.value=23; const rg=AC.createGain(); rg.gain.value=P.f*0.18; rough.connect(rg);
+  const oscs=[1,1.012,0.5].map(m=>{ const o=AC.createOscillator(); o.type="sawtooth"; o.frequency.setValueAtTime(P.f*m,t); if(lv===3){ o.frequency.linearRampToValueAtTime(P.f*m*1.6,t+P.d*0.35); o.frequency.exponentialRampToValueAtTime(P.f*m*0.8,t+P.d); } rg.connect(o.frequency); o.connect(lp); return o; });
+  nf.frequency.value=P.cut*0.8; const ng=AC.createGain(); ng.gain.value=0.35; nf.connect(ng); ng.connect(lp);
+  const pk=P.a*V*0.3;
+  out.gain.exponentialRampToValueAtTime(pk,t+(lv===3?0.35:0.18)); out.gain.setValueAtTime(pk,t+P.d*0.55); out.gain.exponentialRampToValueAtTime(0.0001,t+P.d);
+  [nz,lfo,rough,...oscs].forEach(n=>{ n.start(t); n.stop(t+P.d+0.05); });
+  setTimeout(()=>{ try{ out.disconnect(); }catch{} }, (P.d+0.6)*1000);
+}
+$("#dPlus").onclick=()=>dragonStep(1); $("#dMinus").onclick=()=>dragonStep(-1);
+$("#bagBtn").onclick = () => openView({k:"panel", p:"zaino"});
+
+/* ---------------- overlays ---------------- */
+function openView(v){ S.view=v; renderOverlay(); if(v.k==="region" || v.k==="rtrial" || v.k==="guardian"){ const r=S.regions.get(v.id), z=zoneOf(cls(),v.id); if(r && regionTracks(r.id).length && (z==="liberated" || (z==="explored" && !r.quiet)) && cls()?.at===v.id && nowPlaying!==v.id) playRegion(v.id); } }
+function closeView(){ S.view=null; renderOverlay(); }
+const face = (imageId, name) => imageId ? `<div class="face" style="background-image:url('/_blob/${esc(imageId)}')"></div>` : `<div class="face">${esc((name||"?").charAt(0))}</div>`;
+const ph = t => `<p class="ph">${t}</p>`;
+const ph2 = t => `<p class="note">${t}</p>`;
+function renderOverlay(){
+  const sc=$("#scrim"), card=$("#card"), c=cls(); card.classList.remove("wide","bg"); card.style.removeProperty("--bg");
+  const withBg = (r, html) => { if(!r || !r.bgId) return html; card.classList.add("bg"); card.style.setProperty("--bg", `url('/_blob/${r.bgId}')`); const m=html.match(/^(<button class="close"[^>]*>×<\/button>)/); return m ? m[1]+`<div class="bgpanel">${html.slice(m[1].length)}</div>` : `<div class="bgpanel">${html}</div>`; };
+  if(REMOTE){ sc.hidden=true; return; }
+  const p=c?.pending; let h="";
+  if(p){
+    const ev=S.events.get(p.eventId) || (p.step==="event" ? {title:"Strada tranquilla", text:"", lanterns:0} : null), r=S.regions.get(p.to);
+    if(p.step==="event" && ev){
+      h=`<div class="center"><div class="kicker">${r?`In viaggio verso ${esc(r.name)}`:"Imprevisto"}</div><div class="big">${esc(ev.title||"Imprevisto")}</div>${ev.text?`<p>${esc(ev.text)}</p>`:ph("Il testo della carta si scrive in Regia → Contenuti.")}
+        <div class="crow" style="justify-content:center">${ev.lanterns?`<button class="pbtn ${ev.lanterns<0?"red":"gold"}" data-ov="evapply">${ev.lanterns<0?"Prova fallita":"Ce l'avete fatta"}: ${ev.lanterns>0?"+":""}${ev.lanterns} ${Math.abs(ev.lanterns)===1?"lanterna":"lanterne"}</button><button class="pbtn" data-ov="evskip">${ev.lanterns<0?"Superato, nessun effetto":"Non ce l'avete fatta"}</button>`:`<button class="pbtn solid" data-ov="evskip">Continua</button>`}</div></div>`;
+    } else if(p.step==="wall" && r){
+      h=`<div class="center"><div class="kicker">In viaggio verso ${esc(r.name)}</div><div class="big">La strada è sbarrata</div><p>${esc(p.wallText || r.wallText || `Qualcosa sbarra il passaggio verso ${r.name}: da qui non si passa.`)}</p><div class="crow" style="justify-content:center"><button class="pbtn solid" data-ov="wallback">Torniamo indietro</button></div></div>`;
+      h=withBg(r,h);
+    } else if(p.step==="trial" && r){
+      h=`<div class="center"><div class="kicker">Prova d'ingresso</div><div class="big">${esc(r.name)}</div>${r.entry?`<p>${esc(r.entry)}</p>`:ph("La prova d'ingresso di questa zona si scrive in Regia → Mappa.")}
+        <div class="crow" style="justify-content:center"><button class="pbtn gold" data-ov="trialok">${I.check} Prova superata</button><button class="pbtn red" data-ov="trialko">Prova fallita</button><button class="pbtn" data-ov="trialwait">Più tardi</button></div></div>`;
+      h=withBg(r,h);
+    }
+    if(h){ sc.hidden=false; card.innerHTML=h; return; }
+  }
+  if(S.settings.energyEnabled && c && (c.dragon||0)>=10){
+    sc.hidden=false; card.innerHTML=`<div class="center"><svg class="dragon-eye" viewBox="0 0 200 110" aria-hidden="true"><g class="lid"><path d="M10 55 Q100 -15 190 55 Q100 125 10 55Z" fill="#e0683f" stroke="#2b2418" stroke-width="5"/><ellipse cx="100" cy="55" rx="38" ry="38" fill="#f3c34a" stroke="#2b2418" stroke-width="4"/><ellipse cx="100" cy="55" rx="9" ry="34" fill="#1b1510"/></g></svg><div class="kicker">Troppo chiasso</div><div class="big">Il dragone si è svegliato!</div><p>Il suo ruggito ha riportato la nebbia su tutto il mondo. La compagnia deve ripartire da casa.</p><div class="crow" style="justify-content:center"><button class="pbtn red" data-ov="dragonhit">Si riparte da capo</button><button class="pbtn" data-ov="dragonspare">Vi risparmia, per questa volta</button></div></div>`;
+    return;
+  }
+  const v=S.view; if(!v){ sc.hidden=true; card.innerHTML=""; return; }
+  if(v.k==="confirm"){
+    const r=S.regions.get(v.id); if(!r){ S.view=null; sc.hidden=true; return; }
+    const chk=travelCheck(c, v.id);
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="center"><div class="kicker">Nella nebbia</div><div class="big">${esc(r.name)}?</div>
+      ${chk.ok?`<p>Per attraversare la nebbia${chk.ship?" con la nave":""} servono</p><p class="cost" style="margin:.4em 0">${I.lant} ${chk.cost} ${chk.cost===1?"lanterna":"lanterne"}</p><p>Ne avete ${c.lanterns}. Lungo la strada pescherete un imprevisto, poi vi accamperete alle porte. La prova d'ingresso arriverà quando sarete pronti.</p>
+      <div class="crow" style="justify-content:center"><button class="pbtn gold" data-ov="go" data-id="${esc(v.id)}">Partiamo!</button><button class="pbtn" data-ov="close">Non ora</button></div>`
+      :`<p>${esc(chk.reason)}</p><div class="crow" style="justify-content:center"><button class="pbtn" data-ov="close">Va bene</button></div>`}</div>`;
+  }
+  if(v.k==="confirm") h=withBg(S.regions.get(v.id), h);
+  else if(v.k==="region"){
+    const r=S.regions.get(v.id); if(!r){ S.view=null; sc.hidden=true; return; } const z=zoneOf(c,r.id), isStart=r.id===startId(), here=c?.at===r.id;
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">${z==="liberated"?"Regione liberata":"Regione esplorata"}${c?.at===r.id?" · la compagnia è qui":""}</div><h2>${esc(r.name)}</h2>`;
+    h+= r.story ? `<p>${esc(r.story)}</p>` : ph("La storia di questo luogo si scrive in Regia → Mappa.");
+    if(charVisible(c,r)) h+=`<div class="who">${face(r.character.imageId,r.character.name)}<div><div class="nm">${esc(r.character.name)}</div>${r.character.line?`<p class="line">“${esc(r.character.line)}”</p>`:""}</div></div>`;
+    const nT=r.steps.length, passed=trialsPassed(c,r);
+    if(!isStart) h+=`<h3>Le prove</h3><ul class="steps"><li><button class="tick on" data-ov="unentry" aria-label="Annulla la prova d'ingresso" title="Tocca per annullare">${I.check}</button><span>Prova d'ingresso</span></li>${r.steps.map((s,i)=> i<passed ? `<li><button class="tick on" data-ov="untrial" data-i="${i}" aria-label="Annulla la prova ${i+1}" title="Tocca per annullare">${I.check}</button><span>${esc(trialTitle(r,i))}</span></li>` : i===passed ? `<li class="now"><span class="tick"></span><span><b>?????</b></span></li>` : `<li class="sealed"><span class="tick">${I.lock}</span><span>?????</span></li>`).join("")}</ul>${passed<nT && z==="explored" && here?`<div class="crow"><button class="pbtn solid" data-ov="trial" data-i="${passed}">Inizia la prova</button></div>`:""}`;
+    if(!isStart) h+=`<h3>La prova del guardiano</h3>${z==="liberated"?`<ul class="steps" style="margin-bottom:.4em"><li><button class="tick on" data-ov="unguard" aria-label="Annulla la prova del guardiano" title="Tocca per annullare">${I.check}</button><span>Superata: la regione è libera</span></li></ul>`:""}${z==="liberated" ? (r.activity?`<p>${esc(r.activity)}</p>`:"") : guardianOpen(c,r) ? `<ul class="steps"><li class="now"><span class="tick"></span><span><b>?????</b></span></li></ul>` : `<div class="seal">${I.lock}<span>${passed<nT?"Si aprirà dopo le prove.":`Si aprirà dopo il viaggio su ${esc(planetsPending(c,r)[0]?.name||"il pianeta")}.`}</span></div>`}`;
+    if(z==="liberated" && (r.secret || r.lore)) h+=`<h3>Le scoperte</h3><div class="crow">${r.secret?`<button class="pbtn solid" data-ov="secret">Il segreto</button>`:""}${r.lore?`<button class="pbtn" data-ov="lore">La pergamena</button>`:""}</div>`;
+    else if(r.secret && z!=="liberated") h+=`<h3>Il segreto</h3><div class="seal">${I.lock}<span>Il segreto si aprirà quando la regione sarà liberata.</span></div>`;
+    h+=`<div class="crow" id="cardBtns"></div>`;
+    h=withBg(r,h);
+  }
+  else if(v.k==="side"){
+    const s=S.sides.get(v.id); if(!s){ S.view=null; sc.hidden=true; return; } const reg=regionAt(s.x,s.y), z=reg?zoneOf(c,reg.id):null, here=!!reg && c?.at===reg.id;
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">${s.kind==="mercante"?"Il mercante":"Area secondaria"}${reg?` · ${esc(reg.name)}`:""}</div><h2>${esc(s.name||"Luogo misterioso")}</h2>`;
+    if(!z){ h+=`<p>Questo luogo è ancora avvolto dalla nebbia. Prima bisogna esplorare ${esc(reg?.name||"la regione")}.</p>`; }
+    else {
+      h+= s.activity ? `<p>${esc(s.activity)}</p>` : ph(s.kind==="mercante"?"Le parole del mercante si scrivono in Regia → Mappa → Aree.":"L'attività di questo luogo si scrive in Regia → Mappa → Aree.");
+      if(!here) h+=`<div class="seal" style="margin-top:.8em">${I.lant}<span>Per ${s.kind==="mercante"?"comprare":"guadagnare lanterne"} la compagnia deve trovarsi in ${esc(reg.name)}.</span></div>`;
+      if(s.kind==="mercante"){
+        const its=sorted(S.items);
+        h+=`<h3>In vendita</h3>${its.length?`<div class="shop">${its.map(it=>`<div class="it"><span class="sw2" style="background:${esc(it.color)}">${esc((it.name||"?").charAt(0))}</span><span class="tx"><b>${esc(it.name)}</b><small>${esc(it.effect)}</small></span><button class="pbtn" data-ov="buy" data-id="${esc(it.id)}" ${!here||c.lanterns<it.price?"disabled":""}>${I.lant} ${it.price}</button></div>`).join("")}</div>`:ph("Il mercante non ha ancora niente: gli oggetti si creano in Regia → Contenuti.")}`;
+      } else {
+        h+=`<h3>Ricompensa</h3>${s.reward?`<p>${esc(s.reward)}</p>`:ph("Quante lanterne si possono guadagnare.")}<div class="crow">${[1,2,3].map(n=>`<button class="pbtn gold" data-ov="reward" data-n="${n}" ${here?"":"disabled"}>+${n} ${n===1?"lanterna":"lanterne"}</button>`).join("")}</div>`;
+      }
+    }
+  }
+  else if(v.k==="rtrial"){
+    const r=S.regions.get(v.id); if(!r || v.i>=r.steps.length){ S.view=null; sc.hidden=true; return; }
+    const body=trialBody(r,v.i);
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="center"><div class="kicker">${esc(r.name)} · prova ${v.i+1} di ${r.steps.length}</div><div class="big">${esc(trialTitle(r,v.i))}</div>${body?`<p>${esc(body)}</p>`:""}<div class="crow" style="justify-content:center"><button class="pbtn gold" data-ov="trialpass">${I.check} Prova superata</button><button class="pbtn" data-ov="trialnot">Non ancora</button></div><div class="crow" style="justify-content:center"><button class="pbtn" data-ov="regcard">La scheda della regione</button></div></div>`;
+    h=withBg(r,h);
+  }
+  else if(v.k==="guardian"){
+    const r=S.regions.get(v.id); if(!r){ S.view=null; sc.hidden=true; return; }
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="center"><div class="kicker">${esc(r.name)} · l'ultima prova</div><div class="big">La prova del guardiano</div>${r.activity?`<p>${esc(r.activity)}</p>`:ph("La prova del guardiano si scrive in Regia → Mappa.")}<div class="crow" style="justify-content:center"><button class="pbtn gold" data-ov="guardpass">${I.check} Superata: liberate ${esc(r.name)}!</button><button class="pbtn" data-ov="guardnot">Non ancora</button></div><div class="crow" style="justify-content:center"><button class="pbtn" data-ov="regcard">La scheda della regione</button></div></div>`;
+    h=withBg(r,h);
+  }
+  else if(v.k==="secret"){
+    const r=S.regions.get(v.id); if(!r){ S.view=null; sc.hidden=true; return; }
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">${esc(r.name)} · il segreto</div><h2>${esc(r.secretTitle||"Il segreto")}</h2>${r.secret?`<div class="secret"><p>${esc(r.secret)}</p></div>`:ph("Il segreto si scrive in Regia → Mappa.")}<div class="crow"><button class="pbtn" data-ov="regcard">La scheda della regione</button><button class="pbtn solid" data-ov="close">Chiudi</button></div>`;
+    h=withBg(r,h);
+  }
+  else if(v.k==="lore"){
+    const r=S.regions.get(v.id); if(!r){ S.view=null; sc.hidden=true; return; }
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">Le Cronache · ${esc(r.name)}</div><h2>${esc(r.name)}</h2>${r.lore?`<div class="lore"><p>${esc(r.lore)}</p></div>`:ph("La lore di questa regione si scrive in Regia → Mappa.")}<div class="crow"><button class="pbtn" data-ov="regcard">La scheda della regione</button><button class="pbtn" data-ov="cronache">Tutte le Cronache</button><button class="pbtn solid" data-ov="close">Chiudi la pergamena</button></div>`;
+    h=withBg(r.loreImgId?{bgId:r.loreImgId}:r, h);
+  }
+  if(v.k==="side") h=withBg(S.sides.get(v.id), h);
+  else if(v.k==="launch"){
+    const pl=S.planets.get(v.id); if(!pl){ S.view=null; sc.hidden=true; return; }
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="center"><div class="kicker">Il razzo è pronto</div><div class="big">${esc(pl.name||"Il pianeta")}</div><p>Allacciate le cinture: il razzo vi porterà lassù.</p><div class="crow" style="justify-content:center"><button class="pbtn gold" data-ov="launch" data-id="${esc(pl.id)}">Partiamo!</button><button class="pbtn" data-ov="close">Non ora</button></div></div>`;
+  }
+  else if(v.k==="item"){
+    const it=S.items.get(c?.items[v.i]); if(!it){ S.view=null; sc.hidden=true; return; }
+    h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">Nello zaino</div><h2>${esc(it.name)}</h2>${it.effect?`<p>${esc(it.effect)}</p>`:ph("L'effetto dell'oggetto si scrive in Regia → Contenuti.")}<div class="crow"><button class="pbtn gold" data-ov="use">Usa l'oggetto</button><button class="pbtn" data-ov="bag">Tienilo nello zaino</button></div>`;
+  }
+  else if(v.k==="panel"){
+    card.classList.add("wide");
+    if(v.p==="album"){
+      const rs=regionList().filter(r=>r.character.name);
+      h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">Compagnia ${esc(c?.name||"")}</div><h2>Album dei personaggi</h2>${rs.length?`<div class="grid">${rs.map(r=>charVisible(c,r)?`<div class="gcard">${face(r.character.imageId,r.character.name)}<div class="nm">${esc(r.character.name)}</div><small>${esc(r.name)}</small>${r.character.line?`<p style="font-size:.8em">“${esc(r.character.line)}”</p>`:""}</div>`:`<div class="gcard unknown"><div class="face">?</div><div class="nm">Ancora da incontrare</div><small>${zoneOf(c,r.id)?esc(r.name):"nella nebbia"}</small></div>`).join("")}</div>`:ph("I personaggi si creano in Regia → Mappa, nella scheda di ogni regione.")}`;
+    } else if(v.p==="zaino"){
+      const its=(c?.items||[]).map((iid,i)=>({it:S.items.get(iid), i})).filter(x=>x.it);
+      h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">Compagnia ${esc(c?.name||"")} · ${its.length} ${its.length===1?"oggetto":"oggetti"}</div><h2>Lo zaino</h2>${its.length?`<div class="baggrid">${its.map(({it,i})=>`<button class="bagit" data-ov="item" data-i="${i}"><span class="sw2" style="background:${esc(it.color)}">${esc((it.name||"?").charAt(0))}</span><span><b>${esc(it.name||"Oggetto")}</b>${it.effect?`<small>${esc(it.effect)}</small>`:""}</span></button>`).join("")}</div>`:ph("Lo zaino è vuoto. Gli oggetti arrivano dalle quest, dal mercante o dalla Regia.")}`;
+    } else if(v.p==="cronache"){
+      const rs=regionList().filter(r=>r.lore), seen=rs.filter(r=>c?.loreSeen.includes(r.id));
+      h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">${seen.length} di ${rs.length} pagine scritte</div><h2>Le Cronache</h2>${rs.length?`<div class="chron">${rs.map(r=>c?.loreSeen.includes(r.id)?`<div class="pg"><small>${esc(r.name)}</small>${r.loreImgId?`<img class="loreimg" src="/_blob/${esc(r.loreImgId)}" alt="">`:""}<p>${esc(r.lore)}</p></div>`:`<div class="seal">${I.lock}<span>Una pagina ancora da scrivere.</span></div>`).join("")}</div>`:ph("La lore delle regioni si scrive in Regia → Mappa, nella scheda di ogni regione.")}`;
+    } else if(v.p==="segreti"){
+      const rs=regionList().filter(r=>r.secret), found=rs.filter(r=>zoneOf(c,r.id)==="liberated");
+      h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">${found.length} di ${rs.length} scoperti</div><h2>I segreti</h2>${rs.length?`<div style="display:flex;flex-direction:column;gap:10px">${rs.map(r=>zoneOf(c,r.id)==="liberated"?`<div class="secret"><small style="color:#c9b98f;text-transform:uppercase;letter-spacing:.1em;font-size:.65em">${esc(r.name)}</small>${r.secretTitle?`<b style="display:block;font-family:var(--f-display);font-weight:400;font-size:1.2em;margin:.1em 0 .2em">${esc(r.secretTitle)}</b>`:""}<p>${esc(r.secret)}</p></div>`:`<div class="seal">${I.lock}<span>Un segreto ancora sigillato.</span></div>`).join("")}</div>`:ph("I segreti si scrivono in Regia → Mappa, nella scheda di ogni regione.")}`;
+    } else {
+      const log=c?.log||[], fmt=t=>new Date(t).toLocaleDateString("it-IT",{day:"numeric",month:"long"}), today=new Date().toDateString();
+      const groups=[]; for(const e of log){ const d=new Date(e.t).toDateString(); let g=groups[groups.length-1]; if(!g||g.d!==d){ g={d,t:e.t,items:[]}; groups.push(g); } g.items.push(e); }
+      const prev=[...groups].reverse().find(g=>g.d!==today) || groups[groups.length-1];
+      const all=!!v.all, show = all ? groups.slice().reverse() : (prev?[prev]:[]);
+      h=`<button class="close" aria-label="Chiudi">×</button><div class="kicker">${all?"Il diario di bordo":"Nella puntata precedente"}</div><h2>${all?`Il viaggio di ${esc(c?.name||"")}`:(prev?fmt(prev.t):"Il viaggio comincia")}</h2>
+        ${show.length?show.map(g=>`${all?`<h3>${fmt(g.t)}</h3>`:""}<ul class="loglist">${g.items.map(e=>`<li><time>${new Date(e.t).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}</time><span>${esc(e.x)}</span></li>`).join("")}</ul>`).join(""):ph("Il diario è ancora vuoto.")}
+        <div class="crow"><button class="pbtn" data-ov="diario">${all?"Solo l'ultima lezione":"Tutto il diario"}</button></div>`;
+    }
+  }
+  sc.hidden=!h; card.innerHTML=h;
+  if(v.k==="region") renderCardButtons();
+}
+function renderCardButtons(){
+  const box=$("#cardBtns"); if(!box || S.view?.k!=="region") return;
+  const r=S.regions.get(S.view.id), c=cls(); if(!r) return; const z=zoneOf(c,r.id);
+  let h="";
+  if(c && c.at!==r.id && !c.pending && travelCheck(c, r.id).ok) h+=`<button class="pbtn gold" data-ov="goto">Andiamo a ${esc(r.name)}</button>`;
+  if(z==="explored" && c?.at===r.id && guardianOpen(c,r)) h+=`<button class="pbtn gold" data-ov="guard">Affronta la prova del guardiano</button>`;
+  box.innerHTML=h;
+}
+$("#scrim").addEventListener("pointerdown", e => { if(e.target.id==="scrim" && !cls()?.pending) closeView(); });
+$("#card").addEventListener("click", e => {
+  const b=e.target.closest("[data-ov],.close"); if(!b) return; if(b.classList.contains("close")){ closeView(); return; }
+  const a=b.dataset.ov, v=S.view;
+  if(a==="close") closeView();
+  else if(a==="go") startTravel(b.dataset.id);
+  else if(a==="evapply") resolveEvent(true);
+  else if(a==="evskip") resolveEvent(false);
+  else if(a==="trialok") resolveTrial(true);
+  else if(a==="trialko") resolveTrial(false);
+  else if(a==="trialwait") mutate(c=>{ if(c.pending) c.pending.step="camp"; });
+  else if(a==="wallback") wallBack();
+  else if(a==="free") liberate(v.id);
+  else if(a==="play"){ if(nowPlaying===v.id && !bgm.paused) stopMusic(); else { if(S.muted){ S.muted=false; ls.set("mappa.muted",false); renderMute(); } playRegion(v.id); } }
+  else if(a==="goto") startTravel(v.id);
+  else if(a==="launch") setScene(b.dataset.id);
+  else if(a==="dragonhit") dragonReset();
+  else if(a==="dragonspare") mutate(c=>{ c.dragon=7; }, "Il dragone vi ha risparmiati, per questa volta.");
+  else if(a==="buy") buyItem(v.id, b.dataset.id);
+  else if(a==="reward") rewardSide(v.id, +b.dataset.n);
+  else if(a==="use") useItem(v.i);
+  else if(a==="lore") openLore(v.id);
+  else if(a==="secret") openView({k:"secret", id:v.id});
+  else if(a==="trial") openView({k:"rtrial", id:v.id, i:+b.dataset.i});
+  else if(a==="trialpass"){ passTrial(v.id, v.i); openView({k:"region", id:v.id}); }
+  else if(a==="regcard") openView({k:"region", id:v.id});
+  else if(a==="guard") openView({k:"guardian", id:v.id});
+  else if(a==="untrial"){ const r=S.regions.get(v.id), i=+b.dataset.i; if(r) undoable("Prova tornata da fare.", c => { const arr=(c.steps[r.id]||[]).slice(); for(let k=i;k<arr.length;k++) arr[k]=false; c.steps[r.id]=arr; if(c.zones[r.id]==="liberated"){ c.zones[r.id]="explored"; dropNote(c,r); } }, `${r.name}: la prova "${trialTitle(r,i)}" torna da fare.`); }
+  else if(a==="unguard"){ const r=S.regions.get(v.id); if(r) undoable("Prova del guardiano annullata.", c => { c.zones[r.id]="explored"; dropNote(c,r); }, `${r.name}: la prova del guardiano torna da fare.`); }
+  else if(a==="unentry"){ const r=S.regions.get(v.id); if(r){ undoable("Prova d'ingresso annullata.", c => { const prev=[...c.path].reverse().find(x => x!==r.id && c.zones[x]) || startId() || null; if(c.zones[r.id]==="liberated") dropNote(c,r); delete c.zones[r.id]; c.steps[r.id]=[]; c.at=prev; c.pending={ to:r.id, from:prev, cost:0, trial:true, eventId:null, step:"camp" }; }, `${r.name}: la prova d'ingresso torna da fare, la compagnia è di nuovo accampata alle porte.`); closeView(); } }
+  else if(a==="guardpass"){ liberate(v.id); closeView(); }
+  else if(a==="guardnot"){ const r=S.regions.get(v.id); mutate(() => {}, `${r?.name||"La regione"}: la prova del guardiano si riprova la prossima volta.`); closeView(); }
+  else if(a==="trialnot"){ failTrial(v.id, v.i); closeView(); }
+  else if(a==="cronache") openView({k:"panel", p:"cronache"});
+  else if(a==="bag") openView({k:"panel", p:"zaino"});
+  else if(a==="item") openView({k:"item", i:+b.dataset.i});
+  else if(a==="diario"){ S.view={...v, all:!v.all}; renderOverlay(); }
+});
+
+/* ---------------- drawer ---------------- */
+function setDrawer(open){
+  if(REMOTE) open=true;
+  S.drawerOpen=open; $("#drawer").classList.toggle("open",open); $("#btnRegia").setAttribute("aria-pressed",String(open));
+  document.body.classList.toggle("side", open && !REMOTE);
+  if(!open){ S.drawing=null; S.placing=null; document.body.classList.remove("drawing","placing"); }
+  layout(); renderAll();
+}
+function setTab(t){ S.tab=t; S.drawing=null; S.placing=null; document.body.classList.remove("drawing","placing"); document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t))); renderAll(); }
+let drawerKey="";
+const opt = (v, cur, label) => `<option value="${esc(v)}" ${String(v)===String(cur)?"selected":""}>${esc(label)}</option>`;
+const fText = (k, label, val, p="") => `<label class="fld">${label}<input class="inp" data-f="${k}" value="${esc(val)}" placeholder="${esc(p)}"></label>`;
+const fArea = (k, label, val, p="", t="") => `<label class="fld">${label}<textarea class="inp" data-f="${k}" ${t?`data-t="${t}"`:""} placeholder="${esc(p)}">${esc(val)}</textarea></label>`;
+const fNum = (k, label, val, min=0) => `<label class="fld">${label}<input class="inp" type="number" min="${min}" data-f="${k}" data-t="num" value="${esc(val)}"></label>`;
+const fCheck = (k, label, val) => `<label class="check"><input type="checkbox" data-f="${k}" data-t="check" ${val?"checked":""}> ${label}</label>`;
+const swatches = cur => `<div class="swatches">${COLORS.map(col=>`<button class="sw" data-act="color" data-c="${col}" style="background:${col}" aria-pressed="${cur===col}" aria-label="Colore ${col}"></button>`).join("")}</div>`;
+function audioBox(o, kind){
+  return `${o.audioId?`<div class="audioname">♪ ${esc(o.audioName||"Brano caricato")}</div><div class="flexrow"><button class="btn" data-act="testaudio" data-kind="${kind}">Ascolta</button><button class="btn ghost" data-act="upaudio" data-kind="${kind}">Sostituisci</button><button class="btn danger" data-act="delaudio" data-kind="${kind}">Elimina</button></div>`
+    : S.assets ? `<div class="flexrow"><button class="btn" data-act="upaudio" data-kind="${kind}">Carica brano</button></div>` : `<p class="note">Il caricamento dei brani non è disponibile in questa vista.</p>`}
+`;
+}
+function renderDrawer(force){
+  if(!S.drawerOpen) return;
+  const key=[S.tab,S.mtab,S.ctab,S.sel,S.selSide,S.selItem,S.selEvent,S.selPlanet,S.scene,S.drawing?S.drawing.length:-1,S.offline,!!S.assets,REMOTE].join("|");
+  const ae=document.activeElement, typing=ae && $("#dBody").contains(ae) && (ae.tagName==="TEXTAREA" || (ae.tagName==="INPUT" && !["checkbox","range"].includes(ae.type)));
+  if(!force && typing && key===drawerKey){ const st=$("#saveStatus"); if(st) st.textContent=S.status; return; }
+  drawerKey=key;
+  const body=$("#dBody"), focusId=ae && body.contains(ae) ? (ae.id || ae.dataset.f || null) : null, c=cls(); let h="";
+  if(S.offline) h+=`<div class="banner">Modalità prova: le modifiche non vengono salvate.</div>`;
+
+  if(S.tab==="lezione"){
+    if(REMOTE) h+=`<div class="remotebar"><span class="lab">Sulla LIM</span><button class="btn" data-act="rclose">Chiudi finestre</button><button class="btn" data-act="rstop">Ferma musica</button><button class="btn" data-act="rcar">Canzone dell'allievo</button>${sorted(S.planets).map(pl=>S.scene===pl.id?`<button class="btn primary" data-act="rscene" data-id="">Torna dal pianeta</button>`:`<button class="btn" data-act="rscene" data-id="${esc(pl.id)}">Razzo: ${esc(pl.name)}</button>`).join("")}<button class="btn" data-act="rpanel" data-p="diario">Puntata precedente</button><button class="btn" data-act="rpanel" data-p="album">Album</button><button class="btn" data-act="rpanel" data-p="segreti">Segreti</button><button class="btn" data-act="rpanel" data-p="cronache">Cronache</button><button class="btn" data-act="rpanel" data-p="zaino">Zaino</button><label class="pl-vol" style="width:100%"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg><input type="range" id="rVol" min="0" max="100" value="${Math.round((S.live.vol??S.vol)*100)}" aria-label="Volume sulla LIM" style="flex:1"></label></div>`;
+    h+=`<div class="seg cls">${classList().map(x=>`<button data-act="class" data-id="${esc(x.id)}" aria-pressed="${x.id===c?.id}">${esc(x.name)}</button>`).join("")}</div>`;
+    if(c && S.settings.energyEnabled && (c.dragon||0)>=10) h+=`<div class="alert"><b>Il dragone si è svegliato!</b><div class="flexrow"><button class="btn danger" data-act="dragonhit">Si riparte da capo</button><button class="btn" data-act="dragonspare">Vi risparmia</button></div></div>`;
+    if(c?.pending){ const p=c.pending, r=S.regions.get(p.to), ev=S.events.get(p.eventId);
+      h+=`<div class="alert"><b>${r?`Verso ${esc(r.name)}`:"Imprevisto"}</b>${p.step==="event"?`<span class="note">${esc(ev?.title||"Imprevisto")}</span><div class="flexrow">${ev&&ev.lanterns?`<button class="btn primary" data-act="evapply">Applica ${ev.lanterns>0?"+":""}${ev.lanterns}</button><button class="btn" data-act="evskip">Nessun effetto</button>`:`<button class="btn primary" data-act="evskip">Continua</button>`}</div>`
+        :p.step==="wall"?`<span class="note">La strada è sbarrata</span><div class="flexrow"><button class="btn primary" data-act="wallback">Torniamo indietro</button></div>`
+        :p.step==="camp"?`<span class="note">Accampati alle porte</span><div class="flexrow"><button class="btn primary" data-act="starttrial">Inizia la prova d'ingresso</button></div>`
+        :p.step==="trial"?`<span class="note">Prova d'ingresso</span><div class="flexrow"><button class="btn primary" data-act="trialok">Superata</button><button class="btn danger" data-act="trialko">Fallita</button></div>`:""}
+        ${r?`<button class="btn ghost" data-act="canceltravel">Annulla il viaggio</button>`:""}</div>`; }
+    if(c){
+      h+=`<div class="sec"><div class="cnt"><span class="lab">Lanterne</span><button class="btn sq" data-act="lant" data-d="-1" aria-label="Una lanterna in meno">−</button><span class="val">${c.lanterns}</span><button class="btn sq" data-act="lant" data-d="1" aria-label="Una lanterna in più">+</button></div>
+        ${S.settings.energyEnabled?`<div class="cnt"><span class="lab">Dragone</span><button class="btn sq" data-act="en" data-d="-1" aria-label="Il dragone si calma">−</button><span class="val">${c.dragon||0}</span><button class="btn sq" data-act="en" data-d="1" aria-label="Il dragone si sveglia di più">+</button><button class="btn ghost" data-act="enset">Riaddormenta</button></div>`:""}</div>`;
+      h+=`<div class="sec"><div class="sec-t">Zaino <span class="status">${c.items.length} ${c.items.length===1?"oggetto":"oggetti"}${c.ship?" · nave sbloccata":""}</span></div>${c.items.length?`<div class="rows">${c.items.map((iid,i)=>{ const it=S.items.get(iid); return `<div class="row"><span class="dot" style="background:${esc(it?.color||"#888")}"></span><span class="nm">${esc(it?.name||"Oggetto sparito")}</span><span class="acts"><button class="btn" data-act="useitem" data-i="${i}">Usa</button></span></div>`; }).join("")}</div>`:""}
+        <div class="flexrow">${S.items.size?`<select class="inp" id="giveSel" style="flex:1">${sorted(S.items).map(it=>opt(it.id,"",it.name||"Senza nome")).join("")}</select><button class="btn" data-act="give">Dai</button>`:""}${c.ship?`<button class="btn ghost" data-act="ship" data-v="0">Blocca la nave</button>`:`<button class="btn ghost" data-act="ship" data-v="1">Sblocca la nave</button>`}</div></div>`;
+      h+=`<div class="sec"><div class="sec-t">Regioni</div><div class="rows">`;
+      for(const r of regionList()){ const z=zoneOf(c,r.id), here=c.at===r.id;
+        h+=`<div class="row"><span class="dot" style="background:${esc(r.color)}"></span><span class="nm">${esc(r.name||"Senza nome")}<small>${here?`<span class="pill here">qui</span>`:""}<span class="pill ${z==="liberated"?"lib":z==="explored"?"exp":"fog"}">${z==="liberated"?"liberata":z==="explored"?"esplorata":"nebbia"}</span></small></span><span class="acts">
+          ${!z?(c.pending?"":`<button class="btn primary" data-act="travel" data-id="${esc(r.id)}">Viaggia</button>`)
+            :`${!here && !c.pending?`<button class="btn ghost" data-act="travel" data-id="${esc(r.id)}">Vai</button>`:""}<button class="btn ghost" data-act="rcard" data-id="${esc(r.id)}">Scheda</button>${z==="explored"?(trialsPassed(c,r)<r.steps.length?`<button class="btn primary" data-act="rtrial" data-id="${esc(r.id)}" data-i="${trialsPassed(c,r)}">Prova ${trialsPassed(c,r)+1}</button><button class="btn ghost" data-act="trialpass" data-id="${esc(r.id)}" data-i="${trialsPassed(c,r)}">Superata</button>`:planetsPending(c,r).length?`<span class="pill fog">dopo il pianeta</span>`:`<button class="btn primary" data-act="rguard" data-id="${esc(r.id)}">Guardiano</button><button class="btn ghost" data-act="free" data-id="${esc(r.id)}">Libera</button>`):""}${z==="liberated" && r.lore?`<button class="btn ${c.loreSeen.includes(r.id)?"ghost":"primary"}" data-act="lore" data-id="${esc(r.id)}">Pergamena</button>`:""}`}</span></div>`; }
+      h+=`</div></div>`;
+      if(REMOTE && S.sides.size) h+=`<div class="sec"><div class="sec-t">Aree secondarie</div><div class="rows">${sorted(S.sides).map(s=>`<div class="row"><span class="dot" style="background:${s.kind==="mercante"?"#e3b75a":"#efe4c8"}"></span><span class="nm">${esc(s.name||"Senza nome")}</span><span class="acts"><button class="btn ghost" data-act="rside" data-id="${esc(s.id)}">Apri</button></span></div>`).join("")}</div></div>`;
+      h+=`<div class="sec"><div class="sec-t">Tutta la mappa</div><div class="flexrow"><button class="btn" data-act="fogall">Rimetti la nebbia</button><button class="btn" data-act="revealall">Svela tutto</button><button class="btn danger" data-act="resetadv">Ricomincia l'avventura</button></div></div>`;
+      
+    }
+  }
+
+  if(S.tab==="mappa"){
+    h+=`<div class="seg">${[["regioni","Regioni"],["strade","Strade"],["aree","Aree"],["pianeti","Pianeti"]].map(([k,l])=>`<button data-act="mtab" data-k="${k}" aria-pressed="${S.mtab===k}">${l}</button>`).join("")}</div><div class="sec-t"><span></span><span class="status" id="saveStatus">${esc(S.status)}</span></div>`;
+    if(S.mtab==="regioni"){
+      if(S.sel && S.regions.has(S.sel)) h+=`<button class="btn ghost" data-act="sel" data-id="" style="align-self:flex-start">← Tutte le regioni</button>`; else h+=`<div class="rows">${regionList().map(r=>`<div class="row${S.sel===r.id?" sel":""}"><span class="dot" style="background:${esc(r.color)}"></span><span class="nm">${esc(r.name||"Senza nome")}<small>${S.settings.startRegion===r.id?"partenza":`${r.cost} ${r.cost===1?"lanterna":"lanterne"}`}</small></span><span class="acts"><button class="btn ghost" data-act="sel" data-id="${esc(r.id)}">${S.sel===r.id?"Aperta":"Modifica"}</button></span></div>`).join("")}</div>${REMOTE?"":`<button class="btn" data-act="newreg">+ Nuova regione</button>`}`;
+      const r=S.regions.get(S.sel);
+      if(S.drawing){ h+=`<div class="box"><div class="sec-t">Disegno dei confini</div><p class="note">Tocca la mappa per aggiungere i punti (${S.drawing.length} finora). Tocca il primo punto, quello bianco, per chiudere.</p><div class="flexrow"><button class="btn primary" data-act="finish" ${S.drawing.length<3?"disabled":""}>Chiudi la forma</button><button class="btn ghost" data-act="undo" ${S.drawing.length?"":"disabled"}>Togli l'ultimo punto</button><button class="btn ghost" data-act="canceldraw">Annulla</button></div></div>`; }
+      else if(r){
+        h+=`<div data-obj="regions/${esc(r.id)}" style="display:flex;flex-direction:column;gap:14px">
+          <div class="box"><div class="sec-t">La regione</div>${fText("name","Nome",r.name)}${fNum("cost","Lanterne per entrare",r.cost,0)}
+            <label class="check"><input type="checkbox" data-act="start" ${S.settings.startRegion===r.id?"checked":""}> Città di partenza</label>
+            ${fCheck("shipOnly","Si raggiunge solo in nave",r.shipOnly)}${fCheck("sealed","Sbarrata: chi ci prova spende le lanterne e torna indietro",r.sealed)}${fArea("wallText","Cosa trovano se ci provano (vale quando la strada da cui arrivano non ha un testo suo)",r.wallText,"Es. Le mura di Rocca di Brina chiudono il passaggio.")}
+            ${fArea("story","All'arrivo",r.story)}</div>
+          <div class="box"><div class="sec-t">Personaggio</div><div class="flexrow"><div class="facemini" style="${r.character.imageId?`background-image:url('/_blob/${esc(r.character.imageId)}')`:""}"></div>${S.assets?`<button class="btn" data-act="upimg">${r.character.imageId?"Cambia ritratto":"Ritratto"}</button>`:""}${r.character.imageId?`<button class="btn danger" data-act="delimg">Togli</button>`:""}</div>
+            ${fText("character.name","Nome",r.character.name)}${fText("character.line","Battuta",r.character.line)}${fNum("character.after","Compare dopo la prova n. (0 = subito)",r.character.after,0)}</div>
+          <div class="box"><div class="sec-t">Prove</div>${fArea("entry","Prova d'ingresso",r.entry)}${r.steps.map((st,i)=>`<div class="trialed"><label class="fld">Prova ${i+1}<textarea class="inp" id="tr_${i}" data-f="steps.${i}" placeholder="Prima riga: il titolo. Sotto: cosa devono fare.">${esc(st)}</textarea></label><button class="btn danger" data-act="deltrial" data-i="${i}" aria-label="Elimina la prova ${i+1}">Elimina</button></div>`).join("")}<button class="btn" data-act="addtrial">+ Aggiungi una prova</button>${fArea("activity","Prova del guardiano: si apre dopo tutte le prove",r.activity)}</div>
+          <div class="box"><div class="sec-t">Lore</div>${fArea("lore","Si sblocca con la liberazione: compare come pergamena nella scheda e nelle Cronache",r.lore)}<div class="flexrow"><div class="bgmini" style="${r.loreImgId?`background-image:url('/_blob/${esc(r.loreImgId)}')`:""}"></div>${S.assets?`<button class="btn" data-act="uplore">${r.loreImgId?"Cambia immagine":"Immagine della pergamena"}</button>`:""}${r.loreImgId?`<button class="btn danger" data-act="dellore">Togli</button>`:""}</div></div>
+          <div class="box"><div class="sec-t">Segreto</div>${fText("secretTitle","Titolo del segreto",r.secretTitle,"Il segreto")}${fArea("secret","Si apre quando la regione è liberata",r.secret)}<label class="fld">Appunto dell'allievo<select class="inp" data-f="piece" data-t="num">${opt(0,r.piece>=1&&r.piece<=NP?r.piece:0,"Nessuno")}${NOTES.map(n=>opt(n,r.piece,noteName(n))).join("")}</select></label></div>
+          <div class="box"><div class="sec-t">Immagine di sfondo delle schede</div><div class="flexrow"><div class="bgmini" style="${r.bgId?`background-image:url('/_blob/${esc(r.bgId)}')`:""}"></div>${S.assets?`<button class="btn" data-act="upbg">${r.bgId?"Cambia":"Carica immagine"}</button>`:""}${r.bgId?`<button class="btn danger" data-act="delbg">Togli</button>`:""}</div></div>
+          <div class="box"><div class="sec-t">Musica</div><p class="note">${regionTracks(r.id).length?`Suona: ${esc(regionTracks(r.id).map(t=>t.name||"Brano").join(", "))}.`:"Nessun brano per questa regione."} I brani si scelgono in Contenuti → Playlist. Finché la regione non è liberata suonano attutiti, come sentiti attraverso il fumo.</p>${fCheck("quiet","Muta finché non è liberata",r.quiet)}</div>
+          <div class="flexrow">${REMOTE?"":`<button class="btn" data-act="redraw">Ridisegna i confini</button>`}<button class="btn danger" data-act="delreg">Elimina regione</button></div></div>`;
+      }
+    }
+    if(S.mtab==="strade"){
+      const r=S.regions.get(S.sel);
+      h+=`<div data-obj="settings/main">${fNum("shipCost","Lanterne per un viaggio in nave",S.settings.shipCost??2,0)}</div>`;
+      h+=`<label class="fld">Strade che partono da<select class="inp" id="routeFrom">${opt("",S.sel||"","Scegli una regione")}${regionList().map(x=>opt(x.id,S.sel||"",x.name)).join("")}</select></label>`;
+      if(r){ const nb=[...(adjacency().get(r.id)||[])].map(id=>S.regions.get(id)).filter(Boolean);
+        h+=`<div class="rows">${nb.map(n=>{ const rt=route(r.id,n.id); return `<div class="row" style="grid-template-columns:auto 1fr auto auto auto"><span class="dot" style="background:${esc(n.color)}"></span><span class="nm">${esc(n.name)}<small>${typeof rt.cost==="number"?"costo della strada":"costo d'ingresso della regione"}</small></span><input class="inp" type="number" min="0" style="width:70px" data-route="${esc(n.id)}" value="${typeof rt.cost==="number"?rt.cost:n.cost}" aria-label="Lanterne per andare a ${esc(n.name)}"><label class="check" style="font-size:12px"><input type="checkbox" data-routeclosed="${esc(n.id)}" ${rt.closed?"checked":""}> solo nave</label><label class="check" style="font-size:12px"><input type="checkbox" data-routewall="${esc(n.id)}" ${wallOf(r.id,n.id).wall?"checked":""}> sbarrata da qui</label></div>${wallOf(r.id,n.id).wall?`<input class="inp" id="wt_${esc(n.id)}" data-walltext="${esc(n.id)}" value="${esc(wallOf(r.id,n.id).text||"")}" placeholder="Cosa trovano andando da ${esc(r.name)} a ${esc(n.name)}" aria-label="Cosa blocca la strada verso ${esc(n.name)}">`:""}`; }).join("")}</div>`; }
+    }
+    if(S.mtab==="pianeti"){
+      if(S.selPlanet && S.planets.has(S.selPlanet)) h+=`<button class="btn ghost" data-act="selplanet" data-id="" style="align-self:flex-start">← Tutti i pianeti</button>`;
+      else h+=`<div class="rows">${sorted(S.planets).map(pl=>`<div class="row"><span class="dot" style="background:#a98be0"></span><span class="nm">${esc(pl.name||"Senza nome")}<small>razzo a ${esc(planetLaunchRegion(pl)?.name||"—")}</small></span><span class="acts"><button class="btn ghost" data-act="selplanet" data-id="${esc(pl.id)}">Modifica</button></span></div>`).join("")}</div>${REMOTE?"":`<button class="btn" data-act="newplanet">+ Nuovo pianeta</button>`}`;
+      const pl=S.planets.get(S.selPlanet);
+      if(pl) h+=`<div class="box" data-obj="planets/${esc(pl.id)}"><div class="sec-t">${esc(pl.name||"Pianeta")}</div>${fText("name","Nome",pl.name)}${fArea("text","Testo sul pianeta",pl.text)}${fArea("melody","Melodia sul pianeta: una frase per riga, il trattino manda a capo, la nota magica in MAIUSCOLO",pl.melody)}${fNum("after","Il razzo compare dopo quante prove della regione (0 = appena la regione è esplorata)",pl.after,0)}<div class="sec-t">Brano</div>${pl.audioId?"":`<p class="note">Senza un brano suo, sul pianeta suona quello di ${esc(planetLaunchRegion(pl)?.name||"della regione del razzo")}.</p>`}${audioBox(pl,"planet")}<div class="flexrow">${REMOTE?"":`<button class="btn${S.placing==="planet"?" primary":""}" data-act="placeplanet">${S.placing==="planet"?"Tocca la mappa…":"Sposta il razzo"}</button>`}<button class="btn" data-act="tryplanet">Prova la scena</button><button class="btn danger" data-act="delplanet">Elimina</button></div></div>`;
+    }
+    if(S.mtab==="aree"){
+      if(S.selSide && S.sides.has(S.selSide)) h+=`<button class="btn ghost" data-act="selside" data-id="" style="align-self:flex-start">← Tutte le aree</button>`; else h+=`<div class="rows">${sorted(S.sides).map(s=>`<div class="row${S.selSide===s.id?" sel":""}"><span class="dot" style="background:${s.kind==="mercante"?"#e3b75a":"#efe4c8"}"></span><span class="nm">${esc(s.name||"Senza nome")}<small>${s.kind==="mercante"?"mercante":"attività"} · ${esc(regionAt(s.x,s.y)?.name||"fuori mappa")}</small></span><span class="acts"><button class="btn ghost" data-act="selside" data-id="${esc(s.id)}">${S.selSide===s.id?"Aperta":"Modifica"}</button></span></div>`).join("")}</div>${REMOTE?"":`<button class="btn" data-act="newside">+ Nuova area secondaria</button>`}`;
+      const s=S.sides.get(S.selSide);
+      if(s) h+=`<div class="box" data-obj="sides/${esc(s.id)}"><div class="sec-t">${esc(s.name||"Area secondaria")}</div>${fText("name","Nome",s.name)}<label class="fld">Tipo<select class="inp" data-f="kind">${opt("attivita",s.kind,"Attività: si guadagnano lanterne")}${opt("mercante",s.kind,"Mercante: si comprano oggetti")}</select></label>${fArea("activity",s.kind==="mercante"?"Cosa dice il mercante":"L'attività",s.activity)}${s.kind==="mercante"?"":fText("reward","Ricompensa, come la leggono i bambini",s.reward,"Es. fino a 3 lanterne")}<div class="sec-t">Immagine di sfondo della scheda</div><div class="flexrow"><div class="bgmini" style="${s.bgId?`background-image:url('/_blob/${esc(s.bgId)}')`:""}"></div>${S.assets?`<button class="btn" data-act="upsidebg">${s.bgId?"Cambia":"Carica immagine"}</button>`:""}${s.bgId?`<button class="btn danger" data-act="delsidebg">Togli</button>`:""}</div><div class="flexrow">${REMOTE?"":`<button class="btn${S.placing==="side"?" primary":""}" data-act="placeside">${S.placing==="side"?"Tocca la mappa…":"Sposta sulla mappa"}</button>`}<button class="btn danger" data-act="delside">Elimina</button></div></div>`;
+    }
+  }
+
+  if(S.tab==="contenuti"){
+    h+=`<div class="seg">${[["playlist","Playlist"],["carillon","Appunti"],["suoni","Suoni"],["oggetti","Oggetti"],["imprevisti","Imprevisti"]].map(([k,l])=>`<button data-act="ctab" data-k="${k}" aria-pressed="${S.ctab===k}">${l}</button>`).join("")}</div><div class="sec-t"><span></span><span class="status" id="saveStatus">${esc(S.status)}</span></div>`;
+    if(S.ctab==="carillon"){
+      const o=S.carillon, st=o.starts||[];
+      h+=`<div class="box"><div class="sec-t">Gli appunti dell'allievo</div><p class="note">Nome di ogni appunto:</p>
+        <div class="two">${NOTES.map(n=>`<label class="fld">Appunto ${n}<input class="inp" id="cn${n}" data-carname="${n-1}" value="${esc((o.names||[])[n-1]||"")}" placeholder="${esc(NOTE_NAMES[n-1])}"></label>`).join("")}</div></div>
+        <div class="box"><div class="sec-t">La canzone dell'allievo</div>${audioBox(o,"carillon")}<p class="note">Secondo d'inizio di ogni appunto nel brano (gli appunti non trovati suonano come silenzio):</p>
+        <div class="two">${NOTES.map(n=>`<label class="fld">${esc(noteName(n))}<input class="inp" id="cs${n-1}" type="number" step="0.1" min="0" data-carstart="${n-1}" value="${st[n-1]??""}"></label>`).join("")}</div></div>`;
+    }
+    if(S.ctab==="playlist"){
+      const ts=sorted(S.tracks);
+      h+=`<p class="note">Ogni brano suona solo nelle regioni spuntate, quando la compagnia è lì. Se una regione ha più brani, suonano uno dopo l'altro a ciclo.</p>`;
+      h+=ts.map(t=>`<div class="box" data-obj="tracks/${esc(t.id)}">${fText("name","Nome del brano",t.name)}${audioBox(t,"track:"+t.id)}<div class="sec-t">Suona in</div><div class="two">${regionList().map(r=>`<label class="check"><input type="checkbox" data-trackreg="${esc(t.id)}" data-reg="${esc(r.id)}" ${t.regions.includes(r.id)?"checked":""}> ${esc(r.name||"Senza nome")}</label>`).join("")}</div><div class="flexrow"><button class="btn danger" data-act="deltrack" data-id="${esc(t.id)}">Elimina il brano</button></div></div>`).join("") || ph2("La playlist è vuota.");
+      h+=S.assets?`<button class="btn" data-act="newtrack">+ Aggiungi un brano</button>`:`<p class="note">Il caricamento dei brani non è disponibile in questa vista.</p>`;
+    }
+    if(S.ctab==="suoni"){
+      h+=`<p class="note">Suonano quando il dragone si sveglia di un livello; quando si calma restano in silenzio. Se un posto è vuoto, il dragone usa la sua voce generata.</p>`+SOUNDS.slice(1).map(([k,l])=>`<div class="box"><div class="sec-t">${esc(l)}</div>${audioBox(S.sounds[k]||{},"snd:"+k)}</div>`).join("");
+    }
+    if(S.ctab==="oggetti"){
+      if(S.selItem && S.items.has(S.selItem)) h+=`<button class="btn ghost" data-act="selitem" data-id="" style="align-self:flex-start">← Tutti gli oggetti</button>`; else h+=`<div class="rows">${sorted(S.items).map(it=>`<div class="row${S.selItem===it.id?" sel":""}"><span class="dot" style="background:${esc(it.color)}"></span><span class="nm">${esc(it.name||"Senza nome")}<small>${it.price} lanterne dal mercante</small></span><span class="acts"><button class="btn ghost" data-act="selitem" data-id="${esc(it.id)}">${S.selItem===it.id?"Aperto":"Modifica"}</button></span></div>`).join("")}</div><button class="btn" data-act="newitem">+ Nuovo oggetto</button>`;
+      const it=S.items.get(S.selItem);
+      if(it) h+=`<div class="box" data-obj="items/${esc(it.id)}"><div class="sec-t">${esc(it.name||"Oggetto")}</div>${fText("name","Nome",it.name)}${fArea("effect","Cosa fa",it.effect)}${fNum("price","Prezzo in lanterne",it.price,0)}<div class="flexrow"><button class="btn danger" data-act="delitem">Elimina</button></div></div>`;
+    }
+    if(S.ctab==="imprevisti"){
+      if(S.selEvent && S.events.has(S.selEvent)) h+=`<button class="btn ghost" data-act="selevent" data-id="" style="align-self:flex-start">← Tutte le carte</button>`; else h+=`<div class="rows">${sorted(S.events).map(e=>`<div class="row${S.selEvent===e.id?" sel":""}"><span class="dot" style="background:${e.lanterns<0?"#e0683f":e.lanterns>0?"#8fc27a":"#a9a088"}"></span><span class="nm">${esc(e.title||"Senza titolo")}<small>${e.lanterns?`${e.lanterns>0?"+":""}${e.lanterns} lanterne`:"nessun effetto sulle lanterne"}</small></span><span class="acts"><button class="btn ghost" data-act="selevent" data-id="${esc(e.id)}">${S.selEvent===e.id?"Aperta":"Modifica"}</button></span></div>`).join("")}</div><button class="btn" data-act="newevent">+ Nuova carta</button>`;
+      const e=S.events.get(S.selEvent);
+      if(e) h+=`<div class="box" data-obj="events/${esc(e.id)}"><div class="sec-t">${esc(e.title||"Carta")}</div>${fText("title","Titolo",e.title)}${fArea("text","Testo",e.text)}<label class="fld">Lanterne (+ guadagnate, − perse)<input class="inp" type="number" min="-20" max="20" data-f="lanterns" data-t="num" value="${e.lanterns}"></label><div class="flexrow"><button class="btn danger" data-act="delevent">Elimina</button></div></div>`;
+    }
+  }
+
+  if(S.tab==="classi"){
+    h+=`<div class="sec"><div class="sec-t">Compagnie</div><div class="rows">${classList().map(x=>`<div class="row" style="grid-template-columns:1fr auto"><span class="nm"><input class="inp" id="cn_${esc(x.id)}" data-cname="${esc(x.id)}" value="${esc(x.name)}" aria-label="Nome della compagnia"><small>${Object.keys(x.zones).length} zone · ${x.lanterns} lanterne · ${x.pieces.filter(n=>n>=1&&n<=NP).length}/${NP} appunti</small></span><span class="acts"><button class="btn ghost" data-act="creset" data-id="${esc(x.id)}">Ricomincia</button><button class="btn danger" data-act="cdel" data-id="${esc(x.id)}">Elimina</button></span></div>`).join("")}</div>
+      <div class="flexrow"><input class="inp" id="newClass" placeholder="Es. 1A" style="width:120px"><button class="btn" data-act="cadd">+ Aggiungi classe</button></div></div>`;
+    h+=`<div class="sec" data-obj="settings/main"><div class="sec-t">Risveglio del dragone</div>${fCheck("energyEnabled","Mostra la barra del dragone sulla mappa",S.settings.energyEnabled)}</div>`;
+    h+=`<div class="sec"><div class="sec-t">Questo dispositivo</div>${REMOTE?`<button class="btn" data-act="role" data-v="0">Torna alla mappa</button>`:`<p class="note">Da usare sul telefono.</p><button class="btn" data-act="role" data-v="1">Usa come telecomando</button>`}</div>`;
+    if(window.__mappaDesktop) h+=window.__mappaDesktop(REMOTE);
+    h+=`<div class="sec"><div class="sec-t">Copia di sicurezza</div><div class="flexrow"><button class="btn" data-act="backup">Scarica copia</button><button class="btn ghost" data-act="import">Ripristina da file</button></div></div>`;
+  }
+  body.innerHTML=h;
+  if(focusId){ const el=document.getElementById(focusId) || body.querySelector(`[data-f="${CSS.escape(focusId)}"]`); if(el){ el.focus(); if(el.setSelectionRange && typeof el.value==="string" && el.type!=="number"){ try{ const n=el.value.length; el.setSelectionRange(n,n);}catch{} } } }
+}
+
+function setField(o, f, t, el){
+  let v = t==="check" ? el.checked : el.value;
+  if(t==="num"){ if(el.value==="" || el.value==="-") return false; v = Number(el.value); if(isNaN(v)) return false; }
+  if(t==="lines") v = el.value.split("\n").map(s=>s.trim()).filter(Boolean);
+  const parts=f.split("."); let tgt=o; for(let i=0;i<parts.length-1;i++){ tgt[parts[i]] = tgt[parts[i]] || {}; tgt=tgt[parts[i]]; } tgt[parts[parts.length-1]] = v; return true;
+}
+$("#dBody").addEventListener("input", e => {
+  const t=e.target;
+  if(t.dataset.f){ const wrap=t.closest("[data-obj]"); if(!wrap) return; const path=wrap.dataset.obj, o=objAt(path); if(!o) return;
+    if(!setField(o, t.dataset.f, t.dataset.t, t)) return;
+    if(t.type==="checkbox" || t.tagName==="SELECT"){ save(path); renderAll(); } else { saveSoon(path); renderHud(); renderSvg(); if(S.view) renderOverlay(); }
+    return; }
+  if(t.dataset.carstart!=null){ const st=(S.carillon.starts||[]).slice(); while(st.length<NP) st.push(null); st[+t.dataset.carstart] = t.value===""?null:Number(t.value); S.carillon.starts=st; saveSoon("settings/carillon"); return; }
+  if(t.dataset.carname!=null){ const nm=(S.carillon.names||[]).slice(); while(nm.length<NP) nm.push(""); nm[+t.dataset.carname]=t.value; S.carillon.names=nm; saveSoon("settings/carillon"); renderHud(); return; }
+  if(t.dataset.walltext){ const k=S.sel+">"+t.dataset.walltext; S.routes.dir=S.routes.dir||{}; S.routes.dir[k]={...(S.routes.dir[k]||{}), text:t.value}; saveSoon("settings/routes"); return; }
+  if(t.dataset.route){ const k=routeKey(S.sel,t.dataset.route); const e2={...(S.routes.edges[k]||{})}; if(t.value==="") delete e2.cost; else e2.cost=Math.max(0,Number(t.value)); S.routes.edges[k]=e2; saveSoon("settings/routes"); return; }
+  if(t.dataset.cname){ const c=S.classes.get(t.dataset.cname); if(c){ c.name=t.value; clearTimeout(t._t); t._t=setTimeout(()=>saveClass(c),600); renderHud(); } return; }
+  if(t.id==="rVol"){ clearTimeout(t._t); const v=t.value/100; t._t=setTimeout(()=>writeLive({vol:v}),250); }
+});
+$("#dBody").addEventListener("change", e => {
+  const t=e.target;
+  if(t.dataset.routewall){ const k=S.sel+">"+t.dataset.routewall; S.routes.dir=S.routes.dir||{}; const d2={...(S.routes.dir[k]||{})}; d2.wall=t.checked; S.routes.dir[k]=d2; save("settings/routes"); renderDrawer(true); }
+  if(t.dataset.routeclosed){ const k=routeKey(S.sel,t.dataset.routeclosed); const e2={...(S.routes.edges[k]||{})}; e2.closed=t.checked; S.routes.edges[k]=e2; save("settings/routes"); renderAll(); }
+  if(t.dataset.classf){ const f=t.dataset.classf, on=t.checked; mutate(c=>{ c[f]=on; }, f==="ship" ? (on?"La nave è vostra: ora potete raggiungere anche le zone lontane.":"La nave non è più disponibile.") : null); }
+  if(t.id==="routeFrom"){ S.sel=t.value||null; renderAll(); }
+  if(t.dataset.trackreg){ const tr=S.tracks.get(t.dataset.trackreg); if(tr){ const rid=t.dataset.reg; tr.regions=tr.regions.filter(x=>x!==rid); if(t.checked) tr.regions.push(rid); save("tracks/"+tr.id); if(nowPlaying===rid || cls()?.at===rid) playHere(); } }
+  if(t.dataset.act==="start" && t.checked){ S.settings.startRegion=S.sel; save("settings/main"); renderAll(); }
+  if(t.dataset.f==="order" || t.dataset.f==="cost" || t.dataset.f==="name" || t.dataset.f==="title") renderDrawer(true);
+});
+$("#dBody").addEventListener("focusout", () => setTimeout(()=>{ const ae=document.activeElement; if(!(ae && $("#dBody").contains(ae))) renderDrawer(true); },0));
+let pendingUpload=null;
+$("#dBody").addEventListener("click", e => {
+  const b=e.target.closest("[data-act]"); if(!b || b.tagName==="INPUT" || b.tagName==="SELECT") return;
+  const a=b.dataset.act, id=b.dataset.id, c=cls();
+  switch(a){
+    case "class": selectClass(id); break;
+    case "rclose": writeLive({card:null, cardN:Date.now(), panel:null, panelN:Date.now()}); if(!REMOTE) closeView(); break;
+    case "rstop": writeLive({music:null, musicN:Date.now()}); break;
+    case "rpanel": writeLive({panel:b.dataset.p, panelN:Date.now()}); break;
+    case "rcar": writeLive({music:"__carillon", musicN:Date.now()}); break;
+    case "rcard": if(REMOTE) writeLive({card:id, cardN:Date.now()}); else openView({k:"region",id}); break;
+    case "rside": if(REMOTE) writeLive({card:"side:"+id, cardN:Date.now()}); else openView({k:"side",id}); break;
+    case "evapply": resolveEvent(true); break;
+    case "evskip": resolveEvent(false); break;
+    case "trialok": resolveTrial(true); break;
+    case "starttrial": startTrial(); break;
+    case "trialko": resolveTrial(false); break;
+    case "canceltravel": armConfirm(b,"Conferma",cancelTravel); break;
+    case "wallback": wallBack(); break;
+    case "lant": mutate(c=>{ c.lanterns=Math.max(0,c.lanterns+(+b.dataset.d)); }); break;
+    case "reward": addLanterns(+b.dataset.n); break;
+    case "en": dragonStep(+b.dataset.d); break;
+    case "enset": mutate(c=>{ c.dragon=0; }, "Il dragone si è riaddormentato."); break;
+    case "dragonhit": dragonReset(); break;
+    case "dragonspare": mutate(c=>{ c.dragon=7; }, "Il dragone vi ha risparmiati, per questa volta."); break;
+    case "give": giveItem($("#giveSel").value); break;
+    case "useitem": useItem(+b.dataset.i); break;
+    case "ship": { const on=b.dataset.v==="1"; mutate(c=>{ c.ship=on; }, on?"La nave è vostra: ora potete raggiungere anche le zone lontane.":"La nave non è più disponibile."); break; }
+    case "travel": { const chk=travelCheck(c,id); if(!chk.ok) toast(chk.reason); else startTravel(id); break; }
+    case "free": liberate(id); break;
+    case "lore": openLore(id); break;
+    case "unpass": { const r=S.regions.get(id); if(r){ const n=trialsPassed(c,r); if(n>0) unpassTrial(id, n-1); } break; }
+    case "rtrial": if(REMOTE) writeLive({card:"trial:"+id+":"+b.dataset.i, cardN:Date.now()}); else openView({k:"rtrial", id, i:+b.dataset.i}); break;
+    case "trialpass": passTrial(id, +b.dataset.i); if(REMOTE) writeLive({card:id, cardN:Date.now()}); else if(S.view?.k==="rtrial" && S.view.id===id) openView({k:"region", id}); break;
+    case "rguard": if(REMOTE) writeLive({card:"guard:"+id, cardN:Date.now()}); else openView({k:"guardian", id}); break;
+    case "addtrial": { const r=S.regions.get(S.sel); if(r){ r.steps.push(""); save("regions/"+r.id); renderDrawer(true); const n=r.steps.length-1; setTimeout(()=>{ const el=document.getElementById("tr_"+n); if(el) el.focus(); },0); } break; }
+    case "deltrial": { const ii=+b.dataset.i; armConfirm(b,"Conferma", ()=>{ const r=S.regions.get(S.sel); if(!r) return; r.steps.splice(ii,1); save("regions/"+r.id); for(const x of S.classes.values()){ const a=x.steps?.[r.id]; if(Array.isArray(a) && a.length>ii){ a.splice(ii,1); saveClass(x); } } renderAll(); }); break; }
+    case "cover": armConfirm(b,"Conferma",()=>setZone(id,null)); break;
+    case "force": setZone(id,"explored"); break;
+    case "fogall": fogAll(); break;
+    case "revealall": revealAll(); break;
+    case "resetadv": resetAdventure(); break;
+    case "mtab": S.mtab=b.dataset.k; S.placing=null; S.drawing=null; document.body.classList.remove("placing","drawing"); renderAll(); break;
+    case "ctab": S.ctab=b.dataset.k; renderAll(); break;
+    case "sel": S.sel=id; renderAll(); break;
+    case "newreg": { const nid=uid("r"), max=Math.max(0,...regionList().map(r=>r.order||0)); S.regions.set(nid, normRegion(nid,{name:"Nuova regione",order:max+1,color:COLORS[max%COLORS.length]})); S.sel=nid; S.drawing=[]; document.body.classList.add("drawing"); toast("Tocca la mappa per disegnare il contorno"); renderAll(); break; }
+    case "redraw": S.drawing=[]; document.body.classList.add("drawing"); renderAll(); break;
+    case "finish": finishDrawing(); break;
+    case "undo": S.drawing.pop(); renderSvg(); renderDrawer(true); break;
+    case "canceldraw": { const r=S.regions.get(S.sel); S.drawing=null; document.body.classList.remove("drawing"); if(r && r.poly.length<6){ S.regions.delete(r.id); S.sel=null; } renderAll(); break; }
+    case "delreg": armConfirm(b,"Tocca ancora per eliminare", async()=>{ const r=S.regions.get(S.sel); if(!r) return; S.regions.delete(r.id); S.sel=null; renderAll(); await removeDoc("regions/"+r.id); }); break;
+    case "color": { const wrap=b.closest("[data-obj]"); const o=wrap&&objAt(wrap.dataset.obj); if(o){ o.color=b.dataset.c; save(wrap.dataset.obj); renderAll(); } break; }
+    case "upaudio": pendingUpload={kind:b.dataset.kind}; $("#fileAudio").click(); break;
+    case "testaudio": { const kind=b.dataset.kind, o=audioOwner(kind); if(!o) break; if(kind.startsWith("snd:")){ playSfx(o); break; } const key=kind==="carillon"?"__car":kind==="planet"?"planet:"+S.selPlanet:kind.startsWith("track:")?kind:S.sel; if(nowPlaying===key && !bgm.paused){ stopMusic(); break; } if(S.muted){ S.muted=false; ls.set("mappa.muted",false); renderMute(); } playTrack(key,o,{name:kind==="carillon"?"Canzone dell'allievo, intera":o.name,color:o.color||"#a98be0"}); break; }
+    case "delaudio": armConfirm(b,"Tocca ancora: elimina", async()=>{ const kind=b.dataset.kind, o=audioOwner(kind), path=audioPath(kind); if(!o) return; const old=o.audioId; if(curAudio===old) stopMusic(); o.audioId=""; o.audioName=""; o.audioEnc=""; save(path); renderAll(); if(old&&S.assets){ try{ await S.assets.delete(old);}catch{} } }); break;
+    case "upimg": imgKind="face"; $("#fileImage").click(); break;
+    case "upbg": imgKind="bg"; $("#fileImage").click(); break;
+    case "upsidebg": imgKind="sidebg"; $("#fileImage").click(); break;
+    case "uplore": imgKind="lore"; $("#fileImage").click(); break;
+    case "dellore": { const r=S.regions.get(S.sel); if(r){ const old=r.loreImgId; r.loreImgId=""; save("regions/"+r.id); renderAll(); if(old&&S.assets) S.assets.delete(old).catch(()=>{}); } break; }
+    case "delsidebg": { const sd=S.sides.get(S.selSide); if(sd){ const old=sd.bgId; sd.bgId=""; save("sides/"+sd.id); renderAll(); if(old&&S.assets) S.assets.delete(old).catch(()=>{}); } break; }
+    case "delbg": { const r=S.regions.get(S.sel); if(r){ const old=r.bgId; r.bgId=""; save("regions/"+r.id); renderAll(); if(old&&S.assets) S.assets.delete(old).catch(()=>{}); } break; }
+    case "delimg": { const r=S.regions.get(S.sel); if(r){ const old=r.character.imageId; r.character.imageId=""; save("regions/"+r.id); renderAll(); if(old&&S.assets) S.assets.delete(old).catch(()=>{}); } break; }
+    case "selside": S.selSide=id; renderAll(); break;
+    case "selplanet": S.selPlanet=id; renderAll(); break;
+    case "newplanet": { const nid=uid("p"); S.planets.set(nid, normPlanet(nid,{name:"Nuovo pianeta",x:0.5,y:0.5})); S.selPlanet=nid; S.placing="planet"; document.body.classList.add("placing"); save("planets/"+nid); toast("Tocca la mappa dove parte il razzo"); renderAll(); break; }
+    case "placeplanet": S.placing = S.placing==="planet"?null:"planet"; document.body.classList.toggle("placing",!!S.placing); renderDrawer(true); break;
+    case "tryplanet": setScene(S.selPlanet,false,true); break;
+    case "delplanet": armConfirm(b,"Conferma", async()=>{ const id2=S.selPlanet; S.planets.delete(id2); S.selPlanet=null; renderAll(); await removeDoc("planets/"+id2); }); break;
+    case "rscene": setScene(id||null); break;
+    case "newside": { const nid=uid("a"); S.sides.set(nid, normSide(nid,{name:"Nuova area",x:0.5,y:0.5})); S.selSide=nid; S.placing="side"; document.body.classList.add("placing"); toast("Tocca la mappa dove si trova l'area"); renderAll(); break; }
+    case "placeside": S.placing = S.placing==="side"?null:"side"; document.body.classList.toggle("placing",!!S.placing); renderDrawer(true); break;
+    case "delside": armConfirm(b,"Conferma", async()=>{ const id2=S.selSide; S.sides.delete(id2); S.selSide=null; renderAll(); await removeDoc("sides/"+id2); }); break;
+    case "selitem": S.selItem=id; renderAll(); break;
+    case "newtrack": { const nid=uid("t"), max=Math.max(0,...sorted(S.tracks).map(x=>x.order||0)); S.tracks.set(nid, normTrack(nid,{name:"Nuovo brano", order:max+1})); save("tracks/"+nid); pendingUpload={kind:"track:"+nid}; $("#fileAudio").click(); renderAll(); break; }
+    case "deltrack": armConfirm(b,"Tocca ancora per eliminare", async()=>{ const t=S.tracks.get(id); if(!t) return; if(curAudio===t.audioId) stopMusic(); S.tracks.delete(id); renderAll(); await removeDoc("tracks/"+id); if(t.audioId && S.assets){ try{ await S.assets.delete(t.audioId); }catch{} } }); break;
+    case "newitem": { const nid=uid("o"); S.items.set(nid, normItem(nid,{name:"Nuovo oggetto",price:2,color:COLORS[S.items.size%COLORS.length]})); S.selItem=nid; save("items/"+nid); renderAll(); break; }
+    case "delitem": armConfirm(b,"Conferma", async()=>{ const id2=S.selItem; S.items.delete(id2); S.selItem=null; renderAll(); await removeDoc("items/"+id2); }); break;
+    case "selevent": S.selEvent=id; renderAll(); break;
+    case "newevent": { const nid=uid("e"); S.events.set(nid, normEvent(nid,{title:"Nuovo imprevisto"})); S.selEvent=nid; save("events/"+nid); renderAll(); break; }
+    case "delevent": armConfirm(b,"Conferma", async()=>{ const id2=S.selEvent; S.events.delete(id2); S.selEvent=null; renderAll(); await removeDoc("events/"+id2); }); break;
+    case "cadd": { const inp=$("#newClass"), name=inp.value.trim(); if(!name){ inp.focus(); break; } const cid=name.replace(/[^A-Za-z0-9_-]/g,"")||uid("c"); if(S.classes.has(cid)){ toast("Esiste già una classe con questo nome"); break; } const max=Math.max(0,...classList().map(x=>x.order||0)); const nc=normClass(cid,{name,order:max+1}); freshClass(nc); S.classes.set(cid,nc); saveClass(nc); renderAll(); break; }
+    case "creset": armConfirm(b,"Conferma", ()=>{ const x=S.classes.get(id); if(!x) return; freshClass(x); saveClass(x); if(x.id===cls()?.id){ syncFog(false); stopMusic(); closeView(); } renderAll(); toast(`${x.name} ricomincia da capo`); }); break;
+    case "cdel": armConfirm(b,"Conferma", async()=>{ S.classes.delete(id); if(S.activeClass===id){ S.activeClass=classList()[0]?.id||null; syncFog(false); } renderAll(); await removeDoc("classes/"+id); }); break;
+    case "role": setRemote(b.dataset.v==="1"); break;
+    case "backup": doBackup(); break;
+    case "import": $("#fileBackup").click(); break;
+  }
+});
+function audioOwner(kind){ if(String(kind).startsWith("track:")) return S.tracks.get(kind.slice(6)); if(String(kind).startsWith("snd:")){ const k=kind.slice(4); if(!S.sounds[k]) S.sounds[k]={audioId:"",audioEnc:"",audioName:""}; return S.sounds[k]; } return kind==="carillon" ? S.carillon : kind==="planet" ? S.planets.get(S.selPlanet) : S.regions.get(S.sel); }
+function audioPath(kind){ if(String(kind).startsWith("track:")) return "tracks/"+kind.slice(6); if(String(kind).startsWith("snd:")) return "settings/sounds"; return kind==="carillon" ? "settings/carillon" : kind==="planet" ? "planets/"+S.selPlanet : "regions/"+S.sel; }
+function selectClass(id){ writeLive({cls:id}); selectClassLocal(id); }
+function selectClassLocal(id){ S.activeClass=id; ls.set("mappa.class",id); lastClassForFog=id; syncFog(false); stopMusic(); closeView(); renderAll(); }
+
+$("#fileAudio").addEventListener("change", async e => {
+  const f=e.target.files[0]; e.target.value=""; const kind=pendingUpload?.kind||"region"; const o=audioOwner(kind), path=audioPath(kind); if(!f||!o||!S.assets) return;
+  const ext=(f.name.split(".").pop()||"").toLowerCase(); const T={m4a:"audio/mp4",mp4:"audio/mp4",aac:"audio/aac",mp3:"audio/mpeg",wav:"audio/wav",ogg:"audio/ogg",oga:"audio/ogg",webm:"audio/webm"}; const type=T[ext];
+  if(!type){ toast("Formato non riconosciuto: usa un file .m4a, .mp3 o .wav."); return; }
+  if(f.size>14.5*1024*1024){ toast("Il file supera i 14 MB: esportalo in .m4a o .mp3."); return; }
+  toast("Caricamento del brano…");
+  try{ const dataUrl=await new Promise((ok,ko)=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=ko; fr.readAsDataURL(f); });
+    const text="data:"+type+";base64,"+String(dataUrl).slice(String(dataUrl).indexOf(",")+1);
+    const res=await S.assets.upload(new Blob([text],{type:"text/plain"}),{type:"text/plain"});
+    const old=o.audioId; o.audioId=res.id; o.audioEnc="b64"; o.audioName=f.name; if(kind.startsWith("track:") && (!o.name || o.name==="Nuovo brano")) o.name=f.name.replace(/\.[^.]+$/,""); save(path); renderAll(); toast("Brano caricato"); if(old){ try{ await S.assets.delete(old);}catch{} } }
+  catch(err){ const c=err&&err.code; toast(c==="too_large"?"Il file è troppo grande.":c==="quota_or_state"?"Spazio per i brani esaurito.":"Caricamento non riuscito, riprova."); }
+});
+let imgKind="face";
+$("#fileImage").addEventListener("change", async e => {
+  const f=e.target.files[0]; e.target.value=""; const sideImg=imgKind==="sidebg", r=sideImg?S.sides.get(S.selSide):S.regions.get(S.sel); if(!f||!r||!S.assets) return;
+  if(f.size>20*1024*1024){ toast("L'immagine è troppo grande."); return; }
+  const bg=imgKind!=="face"; toast(bg?"Carico l'immagine…":"Carico il ritratto…");
+  try{ const res=await S.assets.upload(f); const key=imgKind==="lore"?"loreImgId":"bgId", old=bg?r[key]:r.character.imageId; if(bg) r[key]=res.id; else r.character.imageId=res.id; save((sideImg?"sides/":"regions/")+r.id); renderAll(); toast(bg?"Immagine caricata":"Ritratto caricato"); if(old) S.assets.delete(old).catch(()=>{}); }
+  catch(err){ toast(err&&err.code==="unsupported_type"?"Usa un'immagine .png, .jpg o .webp.":"Caricamento non riuscito, riprova."); }
+});
+async function doBackup(){
+  const list = m => sorted(m).map(x=>({id:x.id,...bodyOf(x)}));
+  const data={app:"mappa-avventura",version:2,savedAt:new Date().toISOString(),settings:S.settings,routes:S.routes,carillon:S.carillon,sounds:S.sounds,
+    regions:list(S.regions),tracks:list(S.tracks),classes:list(S.classes),items:list(S.items),events:list(S.events),sides:list(S.sides),planets:list(S.planets)};
+  const json=JSON.stringify(data,null,2), d=new Date(), name=`mappa-avventura-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}.json`;
+  if(S.downloads){ try{ await S.downloads.save({filename:name,data:new Blob([json],{type:"application/json"})}); return; }catch(e){ if(e&&(e.code==="cancelled"||e.code==="declined")) return; } }
+  try{ await navigator.clipboard.writeText(json); toast("Copia di sicurezza copiata negli appunti"); }catch{ toast("Il salvataggio del file non è disponibile qui."); }
+}
+$("#fileBackup").addEventListener("change", async e => {
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{ const d=JSON.parse(await f.text()); if(d.app!=="mappa-avventura"||!Array.isArray(d.regions)) throw 0;
+    const put=(col,arr,norm,map)=>{ for(const x of (arr||[])){ if(!x.id) continue; const o=norm(x.id,x); map.set(o.id,o); save(col+"/"+o.id); } };
+    put("regions",d.regions,normRegion,S.regions); put("tracks",d.tracks,normTrack,S.tracks); put("classes",d.classes,normClass,S.classes); put("items",d.items,normItem,S.items); put("events",d.events,normEvent,S.events); put("sides",d.sides,normSide,S.sides); put("planets",d.planets,normPlanet,S.planets);
+    if(d.settings){ Object.assign(S.settings,d.settings); save("settings/main"); } if(d.routes){ S.routes={edges:d.routes.edges||{}, dir:d.routes.dir||{}}; save("settings/routes"); } if(d.carillon){ S.carillon={...S.carillon,...d.carillon}; save("settings/carillon"); } if(d.sounds){ S.sounds=normSounds(d.sounds); save("settings/sounds"); }
+    syncFog(false); renderAll(); toast("Copia ripristinata"); }
+  catch{ toast("Questo file non è una copia della mappa."); }
+});
+
+/* ---------------- live sync (remote) ---------------- */
+function writeLive(patch){ Object.assign(S.live,patch); write("live/main",{...S.live}); }
+function setRemote(on){
+  REMOTE=on; ls.set("mappa.remote",on); document.body.classList.toggle("remote",on); $("#dTitle").textContent=on?"Telecomando":"Regia";
+  if(on){ stopMusic(); closeView(); S.tab="lezione"; document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab==="lezione"))); setDrawer(true); toast("Questo dispositivo ora è il telecomando"); }
+  else { setDrawer(false); maskDirty=true; lastFrame=0; }
+}
+
+/* ---------------- render all ---------------- */
+function renderAll(){
+  const ready=S.offline||S.loaded.regions;
+  $("#empty").hidden=!(ready && S.regions.size===0 && !editing());
+  document.body.classList.toggle("editing", editing());
+  if(lastClassForFog!==(cls()?.id??null)){ lastClassForFog=cls()?.id??null; syncFog(false); } else syncFog(true);
+  renderSvg(); renderHud(); renderDrawer(); renderPlayer(); renderOverlay();
+  if(S.scene) renderMelody();
+  const atKey=(cls()?.id||"")+":"+(cls()?.at||""); if(atKey!==lastAtKey){ const first=lastAtKey===null; lastAtKey=atKey; if(!first) playHere(); }
+  applyMuffle(true);
+}
+
+/* ---------------- controls ---------------- */
+$("#btnRegia").onclick=()=>setDrawer(!S.drawerOpen);
+$("#btnCloseDrawer").onclick=()=>setDrawer(false);
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+$("#btnPrev").onclick=()=>openView({k:"panel",p:"diario"});
+$("#btnAlbum").onclick=()=>openView({k:"panel",p:"album"});
+$("#btnSecrets").onclick=()=>openView({k:"panel",p:"segreti"});
+$("#btnChron").onclick=()=>openView({k:"panel",p:"cronache"});
+async function toggleFull(){ try{ if(document.fullscreenElement) await document.exitFullscreen(); else { await document.documentElement.requestFullscreen(); try{ await navigator.wakeLock?.request("screen"); }catch{} } }catch{ toast("Lo schermo intero non è disponibile qui: usa F11 sul computer della LIM."); } }
+$("#btnFull").onclick=toggleFull;
+$("#btnSeed").onclick=seedWorld;
+document.addEventListener("keydown", e => {
+  const tg=e.target; if(tg && (tg.tagName==="INPUT"||tg.tagName==="TEXTAREA"||tg.tagName==="SELECT")){ if(e.key==="Escape") tg.blur(); return; }
+  if(e.key==="Escape" && !$("#ctx").hidden){ closeCtx(); return; }
+  if(e.key==="Escape"){ if(S.drawing) $("[data-act=canceldraw]")?.click(); else if(S.view) closeView(); else if(S.scene) setScene(null); else if(S.drawerOpen) setDrawer(false); }
+  else if(REMOTE) return;
+  else if(e.key==="r"||e.key==="R") setDrawer(!S.drawerOpen);
+  else if(e.key==="f"||e.key==="F") toggleFull();
+  else if(e.key==="m"||e.key==="M") toggleMute();
+  else if(e.key==="0"){ Z.k=1; applyZ(); }
+  else if((e.key==="+"||e.key==="=") && S.settings.energyEnabled) dragonStep(1);
+  else if((e.key==="-"||e.key==="_") && S.settings.energyEnabled) dragonStep(-1);
+});
+window.addEventListener("resize", layout);
+try{ const ro=new ResizeObserver(()=>layout()); ro.observe($("#topbar")); ro.observe($("#botbar")); ro.observe($("#view")); }catch{}
+
+/* ---------------- boot ---------------- */
+function seedWorld(){
+  for(const d of DEFAULT_REGIONS){ const r=normRegion(d.id,d); S.regions.set(r.id,r); save("regions/"+r.id); }
+  S.settings.startRegion="borgo"; save("settings/main");
+  if(!S.planets.size){ const pl=normPlanet("dorico",{name:"Il Pianeta Dorico"}); S.planets.set(pl.id,pl); save("planets/"+pl.id); }
+  if(!S.classes.size) for(const [i,n] of ["2A","2B"].entries()){ const c=normClass(n,{name:n,order:i+1}); freshClass(c); S.classes.set(n,c); saveClass(c); }
+  syncFog(false); renderAll();
+}
+function bootOffline(){
+  S.offline=true;
+  DEFAULT_REGIONS.forEach(d=>S.regions.set(d.id,normRegion(d.id,d)));
+  [["e1",{title:"Vento contrario (esempio)",text:"Una raffica spegne una lanterna, a meno che la compagnia non tenga un ostinato per 30 secondi.",lanterns:-1}],["e2",{title:"Un viandante gentile (esempio)",text:"Vi regala una lanterna di scorta.",lanterns:1}]].forEach(([id,v])=>S.events.set(id,normEvent(id,v)));
+  [["o1",{name:"Corno degli orchi (esempio)",effect:"Permette di ripetere una prova fallita.",price:3,color:"#d9663f"}],["o2",{name:"Bussola (esempio)",effect:"Mostra cosa c'è in una zona prima di pagarne il viaggio.",price:2,color:"#8fd3e8"}]].forEach(([id,v])=>S.items.set(id,normItem(id,v)));
+  [["a1",{name:"La nave nella baia (esempio)",kind:"attivita",x:0.27,y:0.73,activity:"Il capitano insegna la canzone dei marinai.",reward:"Fino a 3 lanterne"}],["a2",{name:"Il bazar di Karesh (esempio)",kind:"mercante",x:0.6,y:0.83,activity:"Il mercante vi mostra la sua merce."}]].forEach(([id,v])=>S.sides.set(id,normSide(id,v)));
+  S.planets.set("dorico", normPlanet("dorico",{name:"Il Pianeta Dorico"}));
+  for(const [i,n] of ["2A","2B"].entries()){ const c=normClass(n,{name:n,order:i+1}); freshClass(c); S.classes.set(n,c); }
+  S.loaded.regions=true; syncFog(false); renderAll();
+}
+let migrated=false;
+function migrateTracks(){
+  if(migrated || !S.db || !S.loaded.regions || !S.loaded.tracks) return; migrated=true;
+  for(const r of regionList()){ if(!r.audioId) continue; const tid="t_"+r.id;
+    if(!S.tracks.has(tid) && ![...S.tracks.values()].some(t=>t.audioId===r.audioId)){ const t=normTrack(tid,{ name:(r.audioName||r.name).replace(/\.[^.]+$/,""), order:r.order, audioId:r.audioId, audioEnc:r.audioEnc, audioName:r.audioName, regions:[r.id] }); S.tracks.set(tid,t); save("tracks/"+tid); }
+    r.audioId=""; r.audioEnc=""; r.audioName=""; save("regions/"+r.id); }
+  renderAll();
+}
+function subCol(name, map, norm, after){
+  S.db.collection(name).onSnapshot(snap=>{
+    const m=new Map();
+    for(const d of snap.docs){ const v=d.data(); if(v) m.set(d.id, norm(d.id, v)); }
+    for(const path of Object.keys(timers)){ const [col,id]=path.split("/"); if(col===name && map.has(id)) m.set(id, map.get(id)); }
+    if(name==="regions"){ if(S.drawing && S.sel && map.has(S.sel) && !m.has(S.sel)) m.set(S.sel, map.get(S.sel)); if(drag && map.has(drag.id)) m.set(drag.id, map.get(drag.id)); }
+    map.clear(); for(const [k,v] of m) map.set(k,v);
+    after && after(snap); renderAll(); if(S.view) renderOverlay();
+  }, ()=>{ if(name==="regions"){ S.loaded.regions=true; renderAll(); } });
+}
+async function boot(){
+  layout(); renderMute();
+  if(REMOTE){ document.body.classList.add("remote"); $("#dTitle").textContent="Telecomando"; S.drawerOpen=true; $("#drawer").classList.add("open"); }
+  renderAll(); requestAnimationFrame(frame);
+  const cl=window.claude; if(!cl||typeof cl.use!=="function"){ bootOffline(); return; }
+  const db=await cl.use("db").catch(()=>null); if(!db){ bootOffline(); return; }
+  S.db=db;
+  cl.use("assets").then(a=>{ S.assets=a; renderDrawer(true); }).catch(()=>{});
+  cl.use("downloads").then(d=>{ S.downloads=d; }).catch(()=>{});
+  const slow=setTimeout(()=>{ if(!S.loaded.regions) toast("I dati della mappa non arrivano: controlla la connessione."); },10000);
+  subCol("regions", S.regions, normRegion, snap=>{ if(!snap.metadata.fromCache){ S.loaded.regions=true; clearTimeout(slow); migrateTracks(); } });
+  subCol("tracks", S.tracks, normTrack, snap=>{ if(!snap.metadata.fromCache){ S.loaded.tracks=true; migrateTracks(); } });
+  subCol("classes", S.classes, normClass, ()=>{ if(S.live.cls && S.classes.has(S.live.cls)) S.activeClass=S.live.cls; if(!S.classes.has(S.activeClass)) S.activeClass=classList()[0]?.id||null; });
+  subCol("items", S.items, normItem); subCol("events", S.events, normEvent); subCol("sides", S.sides, normSide); subCol("planets", S.planets, normPlanet);
+  const doc=(p,fn)=>db.doc(p).onSnapshot(d=>{ if(!timers[p]) fn(d.exists?d.data():null); renderAll(); },()=>{});
+  doc("settings/main", v=>{ S.settings={ energyEnabled:!!v?.energyEnabled, startRegion:v?.startRegion||"borgo", shipCost:typeof v?.shipCost==="number"?v.shipCost:2 }; });
+  doc("settings/routes", v=>{ S.routes={ edges:{...(v?.edges||{})}, dir:{...(v?.dir||{})} }; });
+  doc("settings/carillon", v=>{ S.carillon={ starts:(v?.starts||[]).slice(), names:(v?.names||[]).slice(), audioId:v?.audioId||"", audioEnc:v?.audioEnc||"", audioName:v?.audioName||"" }; });
+  doc("settings/sounds", v=>{ S.sounds=normSounds(v); });
+  let liveSeen=false;
+  db.doc("live/main").onSnapshot(d=>{
+    const v=(d.exists&&d.data())||{}, prev=S.live;
+    S.live={cls:v.cls||null,card:v.card||null,cardN:v.cardN||0,music:v.music||null,musicN:v.musicN||0,vol:typeof v.vol==="number"?v.vol:null,panel:v.panel||null,panelN:v.panelN||0,scene:v.scene||null,sceneN:v.sceneN||0};
+    if(liveSeen && S.live.sceneN!==prev.sceneN && (S.live.scene||null)!==S.scene) setScene(S.live.scene, true);
+    if(S.live.cls && S.live.cls!==S.activeClass && S.classes.has(S.live.cls)) selectClassLocal(S.live.cls);
+    if(!REMOTE && liveSeen){
+      if(S.live.cardN!==prev.cardN){ const cd=S.live.card; if(cd && cd.startsWith("side:")) openView({k:"side",id:cd.slice(5)}); else if(cd && cd.startsWith("lore:") && S.regions.has(cd.slice(5))) openView({k:"lore",id:cd.slice(5)}); else if(cd && cd.startsWith("guard:") && S.regions.has(cd.slice(6))) openView({k:"guardian",id:cd.slice(6)}); else if(cd && cd.startsWith("trial:")){ const [,rid,ii]=cd.split(":"); if(S.regions.has(rid)) openView({k:"rtrial",id:rid,i:+ii}); } else if(cd && S.regions.has(cd)) openView({k:"region",id:cd}); else closeView(); }
+      if(S.live.panelN!==prev.panelN){ if(S.live.panel) openView({k:"panel",p:S.live.panel}); else if(S.view?.k==="panel") closeView(); }
+      if(S.live.musicN!==prev.musicN){ if(S.live.music==="__carillon") playCarillon(); else if(S.live.music) playRegion(S.live.music); else { stopMusic(); pauseCarillon(); } }
+      if(S.live.vol!=null && S.live.vol!==prev.vol && Math.abs(S.live.vol-S.vol)>0.001) setVolume(S.live.vol,true);
+    }
+    liveSeen=true; renderDrawer();
+  },()=>{});
+}
+boot();
+})();
+</script>
+
+</body></html>

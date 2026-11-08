@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "MappaAvventura",
+  "outputfilename": "MappaAvventura",
+  "frontend:dir": "frontend",
+  "frontend:install": "",
+  "frontend:build": "",
+  "author": { "name": "Marco" },
+  "info": {
+    "companyName": "Marco",
+    "productName": "Mappa dell'Avventura",
+    "productVersion": "1.3.0",
+    "copyright": "",
+    "comments": "Mappa dell'Avventura per le classi seconde"
+  }
+}
