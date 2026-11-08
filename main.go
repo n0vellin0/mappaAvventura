@@ -111,6 +111,7 @@ func main() {
 	if err != nil {
 		fail(dir, err)
 	}
+	srv.StartLibrary()
 	d := &desk{}
 	srv.SetDesktop(d)
 

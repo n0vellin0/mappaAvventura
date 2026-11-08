@@ -1,0 +1,29 @@
+MAPPA DELL'AVVENTURA - versione per Windows
+============================================
+
+COME SI AVVIA
+1. Copia la cartella "MappaAvventura" dove preferisci: sul desktop, in Documenti
+   oppure su una chiavetta.
+2. Apri la cartella e fai doppio clic su MappaAvventura.exe.
+
+Il programma usa i dati della cartella "MappaDati" che sta accanto a lui:
+  MappaDati\mappa.db         testi, regioni, classi, progressi
+  MappaDati\asset\brani      brani
+  MappaDati\asset\immagini   immagini
+Tieni sempre MappaAvventura.exe e MappaDati nella stessa cartella.
+
+PRIMA APERTURA
+- Se compare "Windows ha protetto il PC", clicca "Ulteriori informazioni"
+  e poi "Esegui comunque".
+- Se il firewall chiede il permesso per le reti, scegli "Consenti" se vuoi usare
+  il telefono come telecomando. Altrimenti scegli "Annulla": la mappa funziona lo stesso.
+- Se manca il componente WebView2, il programma propone di scaricarlo
+  (su Windows 10 e 11 di solito c'e' gia').
+
+AGGIORNARE IL PROGRAMMA
+Quando arriva una versione nuova, sostituisci SOLO il file MappaAvventura.exe.
+Non sostituire la cartella MappaDati: dentro ci sono i progressi delle classi.
+
+COPIA DI SICUREZZA
+Ogni tanto copia tutta la cartella MappaDati su una chiavetta o su un altro computer.
+Prima chiudi il programma.

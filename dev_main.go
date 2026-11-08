@@ -28,6 +28,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	srv.StartLibrary()
 	if os.Getenv("MAPPA_DESKTOP_FINTO") == "1" {
 		srv.SetDesktop(fakeDesk{dir: dir})
 	}

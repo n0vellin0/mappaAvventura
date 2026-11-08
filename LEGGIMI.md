@@ -101,7 +101,10 @@ Il programma usa i dati della cartella `MappaDati` che trova accanto a sé.
 
 - **Chiudi la mappa prima di togliere la chiavetta.** Sul Mac espellila dal Finder, su Windows con "Rimozione sicura". Un database tolto mentre è aperto si può rovinare.
 - **Ogni tanto copia tutta la cartella `MappaDati`** sul Mac. È tutto il lavoro di un anno.
-- **I brani nuovi si caricano dalla Regia**, come prima. Nelle cartelle `asset/brani` e `asset/immagini` i file hanno un nome in codice, che è quello con cui la mappa li ritrova: non rinominarli e non aggiungerli a mano.
+- **I file portano il titolo che hanno nella mappa**: `Portalume.wav`, `Dragone - Sveglio.wav`, `Ritratto - Il mago.jpg`, `Sfondo - Portalume.jpg`... Se cambi il titolo di un brano dalla Regia, entro pochi secondi cambia anche il nome del file. Due titoli uguali diventano `Portalume.wav` e `Portalume (2).wav`.
+- **Brani nuovi senza passare dalla Regia:** copia il file (`.m4a`, `.mp3`, `.wav`) in `asset/brani`. Dopo pochi secondi compare nella **Playlist** con il nome del file come titolo; poi dalla Regia scegli a quali regioni appartiene. Un file identico a un brano già presente viene ignorato.
+- **Non rinominare né togliere a mano i file già nella mappa:** perderebbero il collegamento. Per cambiare il nome, cambia il titolo nella Regia.
+- **Le immagini** si caricano sempre dalla Regia, perché vanno collegate a una regione (ritratto, sfondo, pergamena).
 
 **Prima apertura**
 
@@ -121,6 +124,21 @@ Mette l'app in Applicazioni e i dati in `~/Library/Application Support/MappaAvve
 In questo modo il Mac ha dati suoi, separati da quelli della chiavetta.
 
 ---
+
+## 3b. Versione per Windows da scaricare da GitHub
+
+```bash
+make dist-windows
+```
+
+Crea la cartella `dist/windows/MappaAvventura` con dentro:
+- `MappaAvventura.exe`;
+- `MappaDati`, cioè i dati del progetto (`seed/MappaDati`): testi, brani, immagini e progressi;
+- `LEGGIMI.txt`, con le istruzioni per Windows.
+
+Questa cartella vive nel branch `dist-windows` su GitHub. Dal PC Windows apri il repository, scegli il branch `dist-windows` e poi **Code → Download ZIP**. Estrai lo ZIP e apri `dist\windows\MappaAvventura\MappaAvventura.exe`.
+
+Il PC Windows tiene i suoi dati nella sua cartella `MappaDati`. Per aggiornare solo il programma, lì basta sostituire `MappaAvventura.exe`.
 
 ## 4. In classe
 

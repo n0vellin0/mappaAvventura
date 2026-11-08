@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
@@ -45,6 +46,8 @@ type Server struct {
 	token    string
 	lanPort  int
 	picked   sync.Map // token -> pickedFile
+
+	namesDirty atomic.Bool // i titoli sono cambiati: i file vanno rinominati
 }
 
 type pickedFile struct {
@@ -138,6 +141,7 @@ func (s *Server) api(desktop bool) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		s.markNames(col)
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
@@ -151,6 +155,7 @@ func (s *Server) api(desktop bool) http.Handler {
 			serverError(w, err)
 			return
 		}
+		s.markNames(col)
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
@@ -208,8 +213,8 @@ func (s *Server) api(desktop bool) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		a, err := s.st.GetAsset(id)
-		if errors.Is(err, store.ErrNotFound) {
+		a, raw, err := s.st.ReadAsset(id)
+		if errors.Is(err, store.ErrNotFound) || os.IsNotExist(err) {
 			http.NotFound(w, r)
 			return
 		}
@@ -220,21 +225,10 @@ func (s *Server) api(desktop bool) http.Handler {
 		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 		if a.Enc == "b64" {
 			// La pagina vuole i brani come testo "data:...;base64,...": lo ricostruisce dal file audio.
-			raw, err := os.ReadFile(a.Path)
-			if err != nil {
-				serverError(w, err)
-				return
-			}
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			io.WriteString(w, "data:"+a.ContentType+";base64,")
-			io.WriteString(w, base64.StdEncoding.EncodeToString(raw))
+			writeWhole(w, "text/plain; charset=utf-8", []byte("data:"+a.ContentType+";base64,"+base64.StdEncoding.EncodeToString(raw)))
 			return
 		}
-		data, err := os.ReadFile(a.Path)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
+		data := raw
 		writeWhole(w, a.ContentType, data)
 	})
 
